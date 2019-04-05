@@ -163,7 +163,7 @@ let visual = function () {
                 'visible': true,
             }, [0]);
             Plotly.relayout(graph, {
-                title: 'Visual Map, Finished, ' + countMessage(graph.data[0].x, reds, []),
+                title: 'Visual Map, Finished, ' + countMessage(graph.data[0].x, !keepRed ? reds : graph.data[1].x, []),
             });
         }, 100);
     }
