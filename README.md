@@ -12,6 +12,6 @@
 
 ## LICENSE
 
-[STAT][stat-license].
+[STAT][license].
 
-[stat-license]: https://github.com/zTrix/sata-license
+[license]: https://github.com/7sDream/arbitrary/blob/master/LICENSE
