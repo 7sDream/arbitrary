@@ -14,4 +14,4 @@
 
 [STAT][stat-license].
 
-[stat-license]; https://github.com/zTrix/sata-license
+[stat-license]: https://github.com/zTrix/sata-license
