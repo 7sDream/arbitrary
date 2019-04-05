@@ -12,7 +12,7 @@
 
 ## LICENSE
 
-[STAT][license].
+[SATA][license].
 
 [gh-page]: https://7sdream.github.io/arbitrary/
 [license]: https://github.com/7sDream/arbitrary/blob/master/LICENSE
