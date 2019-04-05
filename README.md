@@ -4,14 +4,15 @@
 
 ## Pages
 
-一些可运行在浏览器里的东西会被发布到这个 Repo 的 Github Page 上，如果感兴趣可以过去看看。
+一些可运行在浏览器里的东西会被发布到这个 Repo 的 [Github Page](gh-page) 上，如果感兴趣可以过去看看。
 
 ## 目录
 
-- VisualMap：对二维坐标系上的 BFS 算法的一次可视化尝试。
+- [VisualMap]：对二维坐标系上的 BFS 算法的一次可视化尝试。
 
 ## LICENSE
 
 [STAT][license].
 
+[gh-page]: https://7sdream.github.io/arbitrary/
 [license]: https://github.com/7sDream/arbitrary/blob/master/LICENSE
