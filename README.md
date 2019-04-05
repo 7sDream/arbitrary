@@ -4,7 +4,7 @@
 
 ## Pages
 
-一些可运行在浏览器里的东西会被发布到这个 Repo 的 [Github Page](gh-page) 上，如果感兴趣可以过去看看。
+一些可运行在浏览器里的东西会被发布到这个 Repo 的 [Github Page][gh-page] 上，如果感兴趣可以过去看看。
 
 ## 目录
 
