@@ -11,8 +11,8 @@ let visual = function () {
         const ratio = layout.width / layout.height;
         const small = max + 1;
         const big = Math.ceil(max * (ratio > 1 ? ratio : 1 / ratio));
-        const yRange = [-small, small];
-        const xRange = [-big, big];
+        let yRange = [-small, small];
+        let xRange = [-big, big];
         if (ratio < 1) {
             [xRange, yRange] = [yRange, xRange];
         }
