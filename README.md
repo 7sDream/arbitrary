@@ -8,7 +8,8 @@
 
 ## 目录
 
-- [VisualMap]：对二维坐标系上的 BFS 算法的一次可视化尝试。
+- `virtualmap`：对二维坐标系上的 BFS 算法的一次可视化尝试。
+- `bezier`: 贝塞尔曲线测试工具。
 
 ## LICENSE
 

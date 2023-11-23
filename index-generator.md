@@ -22,4 +22,4 @@
 
 ## Bezier
 
-三次贝塞尔曲线研究工具。通过 WASM 编译可以[在线使用](bezier/index.html)。
+三次贝塞尔曲线测试工具。通过 WASM 编译可以[在线使用](bezier/index.html)。
