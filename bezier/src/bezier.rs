@@ -1,8 +1,10 @@
 use eframe::{
-    egui::{Id, Sense, Ui},
+    egui::{DragValue, Id, PointerButton, Sense, Ui},
     epaint::{Color32, Rect, Vec2},
 };
-use egui_plot::{Line, MarkerShape, PlotPoint, PlotPoints, PlotTransform, Points};
+use egui_plot::{
+    HPlacement, Line, MarkerShape, PlotBounds, PlotPoint, PlotPoints, PlotTransform, Points,
+};
 
 #[derive(Clone)]
 pub struct Cubic {
@@ -23,16 +25,17 @@ const CTRL_2_COLOR: Color32 = Color32::DARK_BLUE;
 const BOUND_COLOR: Color32 = Color32::BROWN;
 const CURVE_COLOR: Color32 = Color32::BLUE;
 
-struct MovablePoint<'a>(&'a mut PlotPoint);
+struct DraggablePoint<'a>(&'a mut PlotPoint);
 
-impl<'a> MovablePoint<'a> {
+impl<'a> DraggablePoint<'a> {
     fn ui(&mut self, id: Id, ui: &mut Ui, transform: PlotTransform) {
         let drag_rect_size = Vec2::splat(POINT_DRAG_RADIUS);
         let center = transform.position_from_point(self.0);
         let drag_rect = Rect::from_center_size(center, drag_rect_size);
+
         let resp = ui.interact(drag_rect, id, Sense::drag());
 
-        if resp.dragged() {
+        if resp.dragged_by(PointerButton::Primary) {
             let delta = resp.drag_delta();
             let sp = transform.position_from_point(self.0) + delta;
             *self.0 = transform.value_from_position(sp);
@@ -103,16 +106,47 @@ impl Cubic {
         .width(2.0)
     }
 
-    pub fn ui(&mut self, id: Id, ui: &mut Ui) {
-        let transform = egui_plot::Plot::new(id)
+    fn point_controls(text: &str, p: &mut PlotPoint, ui: &mut Ui) {
+        ui.label(text);
+        ui.vertical(|ui| {
+            ui.add(
+                DragValue::new(&mut p.x)
+                    .prefix("x: ")
+                    .update_while_editing(false),
+            );
+            ui.add(
+                DragValue::new(&mut p.y)
+                    .prefix("y: ")
+                    .update_while_editing(false),
+            );
+        });
+    }
+
+    pub fn controls(&mut self, id: Id, ui: &mut Ui) {
+        ui.push_id(id.with("controls"), |ui| {
+            ui.horizontal(|ui| {
+                Self::point_controls("Start: ", &mut self.start, ui);
+                ui.add_space(16.0);
+                Self::point_controls("Ctrl 1: ", &mut self.ctrl1, ui);
+                ui.add_space(16.0);
+                Self::point_controls("Ctrl 2: ", &mut self.ctrl2, ui);
+                ui.add_space(16.0);
+                Self::point_controls("End: ", &mut self.end, ui);
+            });
+        });
+    }
+
+    pub fn plot(&mut self, id: Id, initial_bound: PlotBounds, ui: &mut Ui) {
+        let [x_min, y_min] = initial_bound.min();
+        let [x_max, y_max] = initial_bound.max();
+        let transform = egui_plot::Plot::new(id.with("plot"))
             .data_aspect(1.0)
-            .include_x(-45)
-            .include_x(45)
-            .include_y(-60)
-            .include_y(20)
+            .include_x(x_min)
+            .include_x(x_max)
+            .include_y(y_min)
+            .include_y(y_max)
             .y_axis_width(3)
-            .show_x(false)
-            .show_y(false)
+            .y_axis_position(HPlacement::Right)
             .show(ui, |plot| {
                 plot.line(self.polygon());
                 for point in self.points() {
@@ -129,7 +163,7 @@ impl Cubic {
             &mut self.end,
         ]
         .into_iter()
-        .map(MovablePoint)
+        .map(DraggablePoint)
         .enumerate()
         .for_each(|(i, mut p)| p.ui(id.with(i), ui, transform));
     }
