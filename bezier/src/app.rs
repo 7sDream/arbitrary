@@ -1,31 +1,44 @@
 use eframe::{
-    egui::{CentralPanel, Context, Window},
+    egui::{CentralPanel, Context, Id},
     App, Frame,
 };
-use egui_plot::{PlotBounds, PlotPoint};
+use egui_plot::HPlacement;
 
-use crate::bezier::Cubic;
+use crate::{point::CornerPoint, shape::Shape};
 
 pub struct Application {
-    curve: Cubic,
+    shape: Shape,
 }
 
 impl App for Application {
     fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
+        let id = Id::new("app");
+
         CentralPanel::default().show(ctx, |ui| {
-            let id = ui.auto_id_with("curve");
-            Window::new("Points")
-                .auto_sized()
-                .default_open(false)
-                .default_pos((16.0, 16.0))
-                .show(ctx, |ui| {
-                    self.curve.controls(id, ui);
-                });
-            self.curve.plot(
-                id,
-                PlotBounds::from_min_max([-50.0, -30.0], [50.0, 10.0]),
-                ui,
-            );
+            // Window::new("Points")
+            //     .auto_sized()
+            //     .default_open(false)
+            //     .default_pos((16.0, 16.0))
+            //     .show(ctx, |ui| {
+            //         self.curve.ui(id.with("curve_control"), ui);
+            //     });
+
+            let resp = egui_plot::Plot::new(id.with("curve_canvas"))
+                .data_aspect(1.0)
+                .include_x(-50.0)
+                .include_x(50.0)
+                .include_y(-30.0)
+                .include_y(10.0)
+                .y_axis_width(3)
+                .y_axis_position(HPlacement::Right)
+                .show(ui, |plot| self.shape.plot(plot));
+
+            if resp.response.clicked() {
+                if let Some(pos) = resp.response.interact_pointer_pos() {
+                    let point = resp.transform.value_from_position(pos);
+                    self.shape.push(CornerPoint::new(point))
+                }
+            }
         });
     }
 }
@@ -33,12 +46,7 @@ impl App for Application {
 impl Application {
     pub fn create(_ctx: &eframe::CreationContext<'_>) -> Box<dyn App + 'static> {
         Box::new(Self {
-            curve: Cubic::new(
-                PlotPoint { x: -40.0, y: 0.0 },
-                PlotPoint { x: 40.0, y: 0.0 },
-                PlotPoint { x: -20.0, y: -20.0 },
-                PlotPoint { x: 20.0, y: -20.0 },
-            ),
+            shape: Shape::empty(),
         })
     }
 }

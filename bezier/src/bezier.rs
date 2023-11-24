@@ -1,10 +1,22 @@
-use eframe::{
-    egui::{DragValue, Id, PointerButton, Sense, Ui},
-    epaint::{Color32, Rect, Vec2},
+use eframe::egui::{Id, Ui};
+use egui_plot::{Line, Plot, PlotPoint, PlotPoints, PlotTransform, PlotUi, Points};
+
+use crate::{
+    color::{BOUND_COLOR, CTRL_1_COLOR, CTRL_2_COLOR, CURVE_COLOR, END_COLOR, START_COLOR},
+    point::{self, DraggablePoint},
 };
-use egui_plot::{
-    HPlacement, Line, MarkerShape, PlotBounds, PlotPoint, PlotPoints, PlotTransform, Points,
-};
+
+pub fn quad_to_cubic_ctrl(
+    start: &PlotPoint, ctrl: &PlotPoint, end: &PlotPoint,
+) -> (PlotPoint, PlotPoint) {
+    fn calc(a: &PlotPoint, b: &PlotPoint) -> PlotPoint {
+        let x = a.x + 2.0 * (b.x - a.x) / 3.0;
+        let y = a.y + 2.0 * (b.y - a.y) / 3.0;
+        PlotPoint { x, y }
+    }
+
+    (calc(start, ctrl), calc(end, ctrl))
+}
 
 #[derive(Clone)]
 pub struct Cubic {
@@ -12,35 +24,6 @@ pub struct Cubic {
     pub end: PlotPoint,
     pub ctrl1: PlotPoint,
     pub ctrl2: PlotPoint,
-}
-
-const POINT_SIZE: f32 = 8.0;
-const POINT_DRAG_RADIUS: f32 = 8.0;
-
-const START_COLOR: Color32 = Color32::DARK_GREEN;
-const END_COLOR: Color32 = Color32::DARK_RED;
-const CTRL_1_COLOR: Color32 = Color32::DARK_BLUE;
-const CTRL_2_COLOR: Color32 = Color32::DARK_BLUE;
-
-const BOUND_COLOR: Color32 = Color32::BROWN;
-const CURVE_COLOR: Color32 = Color32::BLUE;
-
-struct DraggablePoint<'a>(&'a mut PlotPoint);
-
-impl<'a> DraggablePoint<'a> {
-    fn ui(&mut self, id: Id, ui: &mut Ui, transform: PlotTransform) {
-        let drag_rect_size = Vec2::splat(POINT_DRAG_RADIUS);
-        let center = transform.position_from_point(self.0);
-        let drag_rect = Rect::from_center_size(center, drag_rect_size);
-
-        let resp = ui.interact(drag_rect, id, Sense::drag());
-
-        if resp.dragged_by(PointerButton::Primary) {
-            let delta = resp.drag_delta();
-            let sp = transform.position_from_point(self.0) + delta;
-            *self.0 = transform.value_from_position(sp);
-        }
-    }
 }
 
 impl Cubic {
@@ -53,19 +36,11 @@ impl Cubic {
         }
     }
 
-    fn point((point, color): (PlotPoint, Color32)) -> Points {
-        Points::new(PlotPoints::Owned(vec![point]))
-            .shape(MarkerShape::Circle)
-            .filled(true)
-            .color(color)
-            .radius(POINT_SIZE)
-    }
-
     fn points(&self) -> impl Iterator<Item = Points> {
         [self.start, self.ctrl1, self.ctrl2, self.end]
             .into_iter()
             .zip([START_COLOR, CTRL_1_COLOR, CTRL_2_COLOR, END_COLOR])
-            .map(Self::point)
+            .map(|(p, c)| point::to_drawable(p, c))
     }
 
     fn polygon(&self) -> Line {
@@ -96,7 +71,7 @@ impl Cubic {
         }
     }
 
-    fn curve(&self) -> Line {
+    pub fn curve(&self) -> Line {
         Line::new(PlotPoints::from_parametric_callback(
             self.parametric_function(),
             0.0..=1.0,
@@ -106,56 +81,31 @@ impl Cubic {
         .width(2.0)
     }
 
-    fn point_controls(text: &str, p: &mut PlotPoint, ui: &mut Ui) {
-        ui.label(text);
-        ui.vertical(|ui| {
-            ui.add(
-                DragValue::new(&mut p.x)
-                    .prefix("x: ")
-                    .update_while_editing(false),
-            );
-            ui.add(
-                DragValue::new(&mut p.y)
-                    .prefix("y: ")
-                    .update_while_editing(false),
-            );
-        });
-    }
-
-    pub fn controls(&mut self, id: Id, ui: &mut Ui) {
+    pub fn ui(&mut self, id: Id, ui: &mut Ui) {
         ui.push_id(id.with("controls"), |ui| {
             ui.horizontal(|ui| {
-                Self::point_controls("Start: ", &mut self.start, ui);
+                point::ui("Start: ", &mut self.start, ui);
                 ui.add_space(16.0);
-                Self::point_controls("Ctrl 1: ", &mut self.ctrl1, ui);
+                point::ui("Ctrl 1: ", &mut self.ctrl1, ui);
                 ui.add_space(16.0);
-                Self::point_controls("Ctrl 2: ", &mut self.ctrl2, ui);
+                point::ui("Ctrl 2: ", &mut self.ctrl2, ui);
                 ui.add_space(16.0);
-                Self::point_controls("End: ", &mut self.end, ui);
+                point::ui("End: ", &mut self.end, ui);
             });
         });
     }
 
-    pub fn plot(&mut self, id: Id, initial_bound: PlotBounds, ui: &mut Ui) {
-        let [x_min, y_min] = initial_bound.min();
-        let [x_max, y_max] = initial_bound.max();
-        let transform = egui_plot::Plot::new(id.with("plot"))
-            .data_aspect(1.0)
-            .include_x(x_min)
-            .include_x(x_max)
-            .include_y(y_min)
-            .include_y(y_max)
-            .y_axis_width(3)
-            .y_axis_position(HPlacement::Right)
-            .show(ui, |plot| {
-                plot.line(self.polygon());
-                for point in self.points() {
-                    plot.points(point);
-                }
-                plot.line(self.curve());
-            })
-            .transform;
+    pub fn plot(&mut self, plot: &mut PlotUi, draw_bound: bool) {
+        if draw_bound {
+            plot.line(self.polygon());
+        }
+        for point in self.points() {
+            plot.points(point);
+        }
+        plot.line(self.curve());
+    }
 
+    pub fn drag(&mut self, transform: PlotTransform, id: Id, ui: &mut Ui) {
         [
             &mut self.start,
             &mut self.ctrl1,
@@ -165,6 +115,6 @@ impl Cubic {
         .into_iter()
         .map(DraggablePoint)
         .enumerate()
-        .for_each(|(i, mut p)| p.ui(id.with(i), ui, transform));
+        .for_each(|(i, mut p)| p.drag(id.with(i), ui, transform));
     }
 }
