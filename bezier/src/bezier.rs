@@ -1,61 +1,56 @@
-use eframe::egui::{Id, Ui};
-use egui_plot::{Line, Plot, PlotPoint, PlotPoints, PlotTransform, PlotUi, Points};
+use std::borrow::Cow;
 
-use crate::{
-    color::{BOUND_COLOR, CTRL_1_COLOR, CTRL_2_COLOR, CURVE_COLOR, END_COLOR, START_COLOR},
-    point::{self, DraggablePoint},
-};
-
-pub fn quad_to_cubic_ctrl(
-    start: &PlotPoint, ctrl: &PlotPoint, end: &PlotPoint,
-) -> (PlotPoint, PlotPoint) {
-    fn calc(a: &PlotPoint, b: &PlotPoint) -> PlotPoint {
-        let x = a.x + 2.0 * (b.x - a.x) / 3.0;
-        let y = a.y + 2.0 * (b.y - a.y) / 3.0;
-        PlotPoint { x, y }
-    }
-
-    (calc(start, ctrl), calc(end, ctrl))
-}
+use eframe::epaint::Color32;
+use egui_plot::{Line, PlotPoint, PlotPoints, PlotUi};
 
 #[derive(Clone)]
-pub struct Cubic {
-    pub start: PlotPoint,
-    pub end: PlotPoint,
-    pub ctrl1: PlotPoint,
-    pub ctrl2: PlotPoint,
+pub struct Bezier<'a> {
+    pub start: &'a PlotPoint,
+    pub end: &'a PlotPoint,
+    pub ctrl1: Cow<'a, PlotPoint>,
+    pub ctrl2: Cow<'a, PlotPoint>,
 }
 
-impl Cubic {
-    pub fn new(start: PlotPoint, end: PlotPoint, ctrl1: PlotPoint, ctrl2: PlotPoint) -> Self {
+impl<'a> Bezier<'a> {
+    pub fn new(
+        start: &'a PlotPoint, ctrl1: &'a PlotPoint, ctrl2: &'a PlotPoint, end: &'a PlotPoint,
+    ) -> Self {
         Self {
             start,
             end,
-            ctrl1,
-            ctrl2,
+            ctrl1: Cow::Borrowed(ctrl1),
+            ctrl2: Cow::Borrowed(ctrl2),
         }
     }
 
-    fn points(&self) -> impl Iterator<Item = Points> {
-        [self.start, self.ctrl1, self.ctrl2, self.end]
-            .into_iter()
-            .zip([START_COLOR, CTRL_1_COLOR, CTRL_2_COLOR, END_COLOR])
-            .map(|(p, c)| point::to_drawable(p, c))
+    pub fn new_quad(start: &'a PlotPoint, ctrl: &'a PlotPoint, end: &'a PlotPoint) -> Self {
+        fn calc(a: &PlotPoint, b: &PlotPoint) -> PlotPoint {
+            let x = a.x + 2.0 * (b.x - a.x) / 3.0;
+            let y = a.y + 2.0 * (b.y - a.y) / 3.0;
+            PlotPoint { x, y }
+        }
+
+        Self {
+            start,
+            end,
+            ctrl1: Cow::Owned(calc(start, ctrl)),
+            ctrl2: Cow::Owned(calc(end, ctrl)),
+        }
     }
 
-    fn polygon(&self) -> Line {
-        Line::new(PlotPoints::Owned(vec![
-            self.start, self.end, self.ctrl2, self.ctrl1, self.start,
-        ]))
-        .color(BOUND_COLOR)
-        .width(1.0)
-    }
+    // fn polygon(&self) -> Line {
+    //     Line::new(PlotPoints::Owned(vec![
+    //         self.start, self.end, self.ctrl2, self.ctrl1, self.start,
+    //     ]))
+    //     .color(CTRL_LINK_LINE_COLOR)
+    //     .width(1.0)
+    // }
 
     fn parametric_function(&self) -> impl Fn(f64) -> (f64, f64) {
-        let start = self.start;
-        let end = self.end;
-        let ctrl1 = self.ctrl1;
-        let ctrl2 = self.ctrl2;
+        let start = *self.start;
+        let end = *self.end;
+        let ctrl1 = self.ctrl1.clone().into_owned();
+        let ctrl2 = self.ctrl2.clone().into_owned();
 
         move |t| {
             let nt = 1.0 - t;
@@ -71,50 +66,17 @@ impl Cubic {
         }
     }
 
-    pub fn curve(&self) -> Line {
+    pub fn curve(&self, color: Color32, width: f32) -> Line {
         Line::new(PlotPoints::from_parametric_callback(
             self.parametric_function(),
             0.0..=1.0,
             64,
         ))
-        .color(CURVE_COLOR)
-        .width(2.0)
+        .color(color)
+        .width(width)
     }
 
-    pub fn ui(&mut self, id: Id, ui: &mut Ui) {
-        ui.push_id(id.with("controls"), |ui| {
-            ui.horizontal(|ui| {
-                point::ui("Start: ", &mut self.start, ui);
-                ui.add_space(16.0);
-                point::ui("Ctrl 1: ", &mut self.ctrl1, ui);
-                ui.add_space(16.0);
-                point::ui("Ctrl 2: ", &mut self.ctrl2, ui);
-                ui.add_space(16.0);
-                point::ui("End: ", &mut self.end, ui);
-            });
-        });
-    }
-
-    pub fn plot(&mut self, plot: &mut PlotUi, draw_bound: bool) {
-        if draw_bound {
-            plot.line(self.polygon());
-        }
-        for point in self.points() {
-            plot.points(point);
-        }
-        plot.line(self.curve());
-    }
-
-    pub fn drag(&mut self, transform: PlotTransform, id: Id, ui: &mut Ui) {
-        [
-            &mut self.start,
-            &mut self.ctrl1,
-            &mut self.ctrl2,
-            &mut self.end,
-        ]
-        .into_iter()
-        .map(DraggablePoint)
-        .enumerate()
-        .for_each(|(i, mut p)| p.drag(id.with(i), ui, transform));
+    pub fn plot(&self, plot: &mut PlotUi, color: Color32, width: f32) {
+        plot.line(self.curve(color, width))
     }
 }

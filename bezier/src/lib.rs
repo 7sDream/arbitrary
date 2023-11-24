@@ -1,5 +1,5 @@
 mod app;
-mod color;
+mod constants;
 
 mod point;
 mod line;

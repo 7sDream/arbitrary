@@ -1,20 +1,19 @@
-use eframe::egui::Ui;
-use egui_plot::{PlotPoint, PlotPoints, PlotTransform, PlotUi, Points};
+use eframe::epaint::Color32;
+use egui_plot::{PlotPoint, PlotPoints, PlotUi};
 
-use crate::color::CURVE_COLOR;
-
-pub struct Line {
-    start: PlotPoint,
-    end: PlotPoint,
+pub struct LineSegment<'a> {
+    start: &'a PlotPoint,
+    end: &'a PlotPoint,
 }
 
-impl Line {
-    pub fn new(start: PlotPoint, end: PlotPoint) -> Self {
+impl<'a> LineSegment<'a> {
+    pub fn new(start: &'a PlotPoint, end: &'a PlotPoint) -> Self {
         Self { start, end }
     }
 
     pub fn parametric_function(&self) -> impl Fn(f64) -> (f64, f64) {
-        let Self { start, end } = *self;
+        let start = *self.start;
+        let end = *self.end;
 
         move |t| {
             let x = (1.0 - t) * start.x + t * end.x;
@@ -23,21 +22,17 @@ impl Line {
         }
     }
 
-    pub fn curve(&self) -> egui_plot::Line {
+    pub fn curve(&self, color: Color32, width: f32) -> egui_plot::Line {
         egui_plot::Line::new(PlotPoints::from_parametric_callback(
             self.parametric_function(),
             0.0..=1.0,
             2,
         ))
-        .color(CURVE_COLOR)
-        .width(2.0)
+        .color(color)
+        .width(width)
     }
 
-    pub fn plot(&self, plot: &mut PlotUi) {
-        plot.line(self.curve());
+    pub fn plot(&self, plot: &mut PlotUi, color: Color32, width: f32) {
+        plot.line(self.curve(color, width))
     }
-
-    pub fn ui(&self, ui: &mut Ui) {}
-
-    pub fn drag(&self, transform: PlotTransform, ui: &mut Ui) {}
 }
