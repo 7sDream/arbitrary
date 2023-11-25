@@ -2,11 +2,13 @@
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
+    use eframe::{egui::ViewportBuilder, NativeOptions};
+
     eframe::run_native(
         "Bezier",
-        eframe::NativeOptions {
-            initial_window_size: Some((640.0, 480.0).into()),
-            ..eframe::NativeOptions::default()
+        NativeOptions {
+            viewport: ViewportBuilder::default().with_inner_size((640.0, 480.0)),
+            ..NativeOptions::default()
         },
         Box::new(bezier::Application::create),
     )

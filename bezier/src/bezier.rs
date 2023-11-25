@@ -1,7 +1,8 @@
 use std::borrow::Cow;
 
-use eframe::epaint::Color32;
 use egui_plot::{Line, PlotPoint, PlotPoints, PlotUi};
+
+use crate::option::LinePlotOption;
 
 #[derive(Clone)]
 pub struct Bezier<'a> {
@@ -13,17 +14,18 @@ pub struct Bezier<'a> {
 
 impl<'a> Bezier<'a> {
     pub fn new(
-        start: &'a PlotPoint, ctrl1: &'a PlotPoint, ctrl2: &'a PlotPoint, end: &'a PlotPoint,
+        start: &'a PlotPoint, ctrl1: Cow<'a, PlotPoint>, ctrl2: Cow<'a, PlotPoint>,
+        end: &'a PlotPoint,
     ) -> Self {
         Self {
             start,
             end,
-            ctrl1: Cow::Borrowed(ctrl1),
-            ctrl2: Cow::Borrowed(ctrl2),
+            ctrl1,
+            ctrl2,
         }
     }
 
-    pub fn new_quad(start: &'a PlotPoint, ctrl: &'a PlotPoint, end: &'a PlotPoint) -> Self {
+    pub fn new_quad<'b>(start: &'a PlotPoint, ctrl: &'b PlotPoint, end: &'a PlotPoint) -> Self {
         fn calc(a: &PlotPoint, b: &PlotPoint) -> PlotPoint {
             let x = a.x + 2.0 * (b.x - a.x) / 3.0;
             let y = a.y + 2.0 * (b.y - a.y) / 3.0;
@@ -37,14 +39,6 @@ impl<'a> Bezier<'a> {
             ctrl2: Cow::Owned(calc(end, ctrl)),
         }
     }
-
-    // fn polygon(&self) -> Line {
-    //     Line::new(PlotPoints::Owned(vec![
-    //         self.start, self.end, self.ctrl2, self.ctrl1, self.start,
-    //     ]))
-    //     .color(CTRL_LINK_LINE_COLOR)
-    //     .width(1.0)
-    // }
 
     fn parametric_function(&self) -> impl Fn(f64) -> (f64, f64) {
         let start = *self.start;
@@ -66,17 +60,17 @@ impl<'a> Bezier<'a> {
         }
     }
 
-    pub fn curve(&self, color: Color32, width: f32) -> Line {
+    pub fn curve(&self, opt: LinePlotOption) -> Line {
         Line::new(PlotPoints::from_parametric_callback(
             self.parametric_function(),
             0.0..=1.0,
             64,
         ))
-        .color(color)
-        .width(width)
+        .color(opt.color)
+        .width(opt.width as f32)
     }
 
-    pub fn plot(&self, plot: &mut PlotUi, color: Color32, width: f32) {
-        plot.line(self.curve(color, width))
+    pub fn plot(&self, plot: &mut PlotUi, opt: LinePlotOption) {
+        plot.line(self.curve(opt))
     }
 }

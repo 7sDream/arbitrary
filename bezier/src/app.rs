@@ -2,7 +2,7 @@ use eframe::{
     egui::{CentralPanel, Context, Id, Key, Window},
     App, Frame,
 };
-use egui_plot::HPlacement;
+use egui_plot::{HPlacement, Plot};
 
 use crate::{
     point::{CornerPoint, SmoothPoint},
@@ -23,14 +23,14 @@ impl App for Application {
                 .default_open(false)
                 .default_pos((16.0, 16.0))
                 .show(ctx, |ui| {
-                    self.shape.ui(ui, id.with("shape_data"));
+                    self.shape.controls(ui, id.with("shape_data"));
                 });
 
             if ctx.input(|i| i.key_released(Key::C)) {
                 self.shape.toggle_close();
             }
 
-            let resp = egui_plot::Plot::new(id.with("shape_canvas"))
+            let resp = Plot::new(id.with("shape_canvas"))
                 .data_aspect(1.0)
                 .include_x(-50.0)
                 .include_x(50.0)
@@ -40,15 +40,7 @@ impl App for Application {
                 .y_axis_position(HPlacement::Right)
                 .show(ui, |plot| self.shape.plot(plot));
 
-            if resp.response.clicked() {
-                if let Some(pos) = resp.response.interact_pointer_pos() {
-                    let point = resp.transform.value_from_position(pos);
-                    self.shape.push(CornerPoint::new(point))
-                }
-            } else {
-                self.shape
-                    .interact(ui, id.with("shape_interact"), resp.transform);
-            }
+            self.shape.interact(ui, id, resp);
         });
     }
 }
@@ -59,7 +51,7 @@ impl Application {
             CornerPoint::new([-40.0, 0.0].into())
                 .with_out_ctrl([-20.0, -20.0].into())
                 .into(),
-            SmoothPoint::horizontal([0.0, -20.0].into(), 10.0).into(),
+            SmoothPoint::horizontal([0.0, -20.0].into(), 10.0, 10.0).into(),
             CornerPoint::new([40.0, 0.0].into())
                 .with_in_ctrl([20.0, -20.0].into())
                 .into(),

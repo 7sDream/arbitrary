@@ -1,34 +1,27 @@
-use std::{borrow::Cow, f64::consts::PI};
+use std::borrow::Cow;
 
 use eframe::{
-    egui::{DragValue, Id, PointerButton, Sense, Slider, Ui},
-    epaint::{Color32, Rect, Vec2},
+    egui::{DragValue, Id, PointerButton, Response, Sense, Slider, Ui},
+    epaint::{Pos2, Rect, Vec2},
 };
-use egui_plot::{MarkerShape, PlotPoint, PlotPoints, PlotTransform, PlotUi, Points};
+use egui_plot::{PlotPoint, PlotPoints, PlotTransform, PlotUi, Points};
 
 use crate::{
-    constants::{
-        CORNEL_MARK, CTRL_1_COLOR, CTRL_2_COLOR, CTRL_LINK_LINE_COLOR, CTRL_MARK, MAIN_POINT_COLOR,
-        SMOOTH_MARK,
-    },
     line::LineSegment,
+    option::{PointPlotOption, CORNEL_POINT, SMOOTH_POINT},
 };
-
-pub const MAIN_POINT_SIZE: f32 = 8.0;
-pub const CTRL_POINT_SIZE: f32 = 6.0;
-pub const POINT_DRAG_RADIUS: f32 = 8.0;
 
 pub trait PlotPointExt {
     fn x(&self) -> f64;
     fn y(&self) -> f64;
 
-    fn plot(&self, plot: &mut PlotUi, mark: MarkerShape, size: f32, color: Color32) {
+    fn plot(&self, plot: &mut PlotUi, opt: PointPlotOption) {
         plot.points(
             Points::new(PlotPoints::Owned(vec![[self.x(), self.y()].into()]))
-                .shape(mark)
+                .shape(opt.mark)
                 .filled(true)
-                .radius(size)
-                .color(color),
+                .radius(opt.size as f32 / 2.0)
+                .color(opt.color),
         )
     }
 
@@ -37,7 +30,7 @@ pub trait PlotPointExt {
         (x * x + y * y).sqrt()
     }
 
-    // theta between [0, 2Pi]
+    // theta between [0, 360]
     fn polar(&self) -> (f64, f64) {
         let (x, y) = (self.x(), self.y());
 
@@ -47,9 +40,9 @@ pub trait PlotPointExt {
 
         let r = self.length_from_origin();
 
-        let mut theta = (x / self.length_from_origin()).acos();
+        let mut theta = (x / self.length_from_origin()).acos().to_degrees();
         if y.is_sign_negative() {
-            theta = 2.0 * PI - theta;
+            theta = 360.0 - theta;
         }
 
         (r, theta)
@@ -78,30 +71,82 @@ pub trait PlotPointExt {
 
     fn move_follow(&self, dir: f64, length: f64) -> PlotPoint {
         PlotPoint {
-            x: self.x() + dir.cos() * length,
-            y: self.y() + dir.sin() * length,
+            x: self.x() + dir.to_radians().cos() * length,
+            y: self.y() + dir.to_radians().sin() * length,
         }
     }
 }
 
-fn drag(p: &mut PlotPoint, id: Id, ui: &mut Ui, transform: PlotTransform) -> bool {
-    let drag_rect_size = Vec2::splat(POINT_DRAG_RADIUS);
-    let center = transform.position_from_point(p);
-    let drag_rect = Rect::from_center_size(center, drag_rect_size);
-    let resp = ui.interact(drag_rect, id, Sense::drag());
+struct PointInteract {
+    transform: PlotTransform,
+    position: Pos2,
+    response: Option<Response>,
+}
 
-    if resp.dragged_by(PointerButton::Primary) {
-        let delta = resp.drag_delta();
-        let sp = center + delta;
-        *p = transform.value_from_position(sp);
-        true
-    } else {
+impl PointInteract {
+    pub fn new(point: &PlotPoint, id: Id, ui: &Ui, transform: PlotTransform, size: f64) -> Self {
+        let position = transform.position_from_point(point);
+
+        let mut result = Self {
+            transform,
+            position,
+            response: None,
+        };
+
+        let bound = transform.bounds();
+        if !bound.is_valid() {
+            return result;
+        }
+
+        let [x_min, y_min] = bound.min();
+        let [x_max, y_max] = bound.max();
+        let half = size / 2.0;
+
+        if point.x + half < x_min
+            || point.x - half > x_max
+            || point.y + half < y_min
+            || point.y - half > y_max
+        {
+            return result;
+        }
+
+        let rect = Rect::from_center_size(result.position, Vec2::splat(size as f32));
+        let response = ui.interact(rect, id, Sense::click_and_drag());
+
+        result.response.replace(response);
+
+        result
+    }
+
+    pub fn drag(&mut self, p: &mut PlotPoint) -> bool {
+        if let Some(resp) = self.response.as_mut() {
+            if resp.dragged_by(PointerButton::Primary) {
+                let sp = self.transform.position_from_point(p) + resp.drag_delta();
+                *p = self.transform.value_from_position(sp);
+                return true;
+            }
+        }
+
         false
+    }
+
+    pub fn clicked(&self) -> bool {
+        self.response
+            .as_ref()
+            .map(|r| r.clicked())
+            .unwrap_or_default()
+    }
+
+    pub fn context_menu(&mut self, add_contents: impl FnOnce(&mut Ui)) {
+        if let Some(resp) = self.response.take() {
+            self.response.replace(resp.context_menu(add_contents));
+        }
     }
 }
 
 pub fn controls(p: &mut PlotPoint, ui: &mut Ui, text: &str) {
-    ui.collapsing(text, |ui| {
+    ui.horizontal(|ui| {
+        ui.label(text);
         ui.add(
             DragValue::new(&mut p.x)
                 .prefix("x: ")
@@ -125,6 +170,14 @@ impl PlotPointExt for PlotPoint {
     }
 }
 
+pub enum PointAction {
+    Click,
+    Delete,
+    ConvertToCorner,
+    ConvertToSmooth,
+}
+
+#[derive(Clone)]
 pub struct CornerPoint {
     in_ctrl: Option<PlotPoint>,
     point: PlotPoint,
@@ -151,49 +204,139 @@ impl CornerPoint {
     }
 
     pub fn plot(&self, plot: &mut PlotUi) {
-        self.point
-            .plot(plot, CORNEL_MARK, MAIN_POINT_SIZE, MAIN_POINT_COLOR);
+        self.point.plot(plot, CORNEL_POINT.point);
         if let Some(p) = &self.in_ctrl {
-            p.plot(plot, CTRL_MARK, CTRL_POINT_SIZE, CTRL_2_COLOR);
-            LineSegment::new(&self.point, p).plot(plot, CTRL_LINK_LINE_COLOR, 1.0);
+            p.plot(plot, CORNEL_POINT.in_ctrl);
+            LineSegment::new(&self.point, p).plot(plot, CORNEL_POINT.in_ctrl_link);
         }
         if let Some(p) = &self.out_ctrl {
-            p.plot(plot, CTRL_MARK, CTRL_POINT_SIZE, CTRL_1_COLOR);
-            LineSegment::new(&self.point, p).plot(plot, CTRL_LINK_LINE_COLOR, 1.0);
+            p.plot(plot, CORNEL_POINT.out_ctrl);
+            LineSegment::new(&self.point, p).plot(plot, CORNEL_POINT.out_ctrl_link);
         }
     }
 
-    pub fn drag(&mut self, ui: &mut Ui, id: Id, transform: PlotTransform) -> bool {
-        if drag(&mut self.point, id.with("point"), ui, transform) {
-            return true;
+    pub fn interact(
+        &mut self, ui: &mut Ui, id: Id, transform: PlotTransform,
+    ) -> Option<PointAction> {
+        let mut action = None;
+
+        let mut p_act = PointInteract::new(
+            &self.point,
+            id.with("point"),
+            ui,
+            transform,
+            CORNEL_POINT.point.size,
+        );
+        p_act.drag(&mut self.point);
+        p_act.context_menu(|ui| {
+            self.controls(ui);
+
+            if self.in_ctrl.is_none() || self.out_ctrl.is_none() {
+                ui.menu_button("Add", |ui| {
+                    ui.add_enabled_ui(self.in_ctrl.is_none(), |ui| {
+                        if ui.button("In ctrl point").clicked() {
+                            self.in_ctrl.replace(PlotPoint {
+                                x: self.point.x - 10.0,
+                                y: self.point.y,
+                            });
+                            ui.close_menu();
+                        }
+                    });
+                    ui.add_enabled_ui(self.out_ctrl.is_none(), |ui| {
+                        if ui.button("Out ctrl point").clicked() {
+                            self.out_ctrl.replace(PlotPoint {
+                                x: self.point.x + 10.0,
+                                y: self.point.y,
+                            });
+                            ui.close_menu();
+                        }
+                    });
+                });
+            }
+
+            ui.menu_button("Delete", |ui| {
+                ui.add_enabled_ui(self.in_ctrl.is_some(), |ui| {
+                    if ui.button("In ctrl point").clicked() {
+                        self.in_ctrl.take();
+                        ui.close_menu();
+                    }
+                });
+
+                ui.add_enabled_ui(self.out_ctrl.is_some(), |ui| {
+                    if ui.button("Out ctrl point").clicked() {
+                        self.out_ctrl.take();
+                        ui.close_menu();
+                    }
+                });
+
+                if ui.button("Point").clicked() {
+                    action.replace(PointAction::Delete);
+                    ui.close_menu();
+                }
+            });
+
+            if ui.button("Convert to smooth point").clicked() {
+                action.replace(PointAction::ConvertToSmooth);
+                ui.close_menu();
+            }
+        });
+        if p_act.clicked() {
+            action.replace(PointAction::Click);
         }
 
+        let mut delete_in = false;
         if let Some(p) = self.in_ctrl.as_mut() {
-            if drag(p, id.with("ctrl1"), ui, transform) {
-                return true;
-            }
+            p_act.drag(p); // ctrl point move follows main point
+            let mut in_act =
+                PointInteract::new(p, id.with("in"), ui, transform, CORNEL_POINT.in_ctrl.size);
+            in_act.drag(p);
+            in_act.context_menu(|ui| {
+                controls(p, ui, "In ctrl");
+
+                if ui.button("Delete").clicked() {
+                    delete_in = true;
+                    ui.close_menu();
+                }
+            });
+        }
+        if delete_in {
+            self.in_ctrl.take();
         }
 
+        let mut delete_out = false;
         if let Some(p) = self.out_ctrl.as_mut() {
-            if drag(p, id.with("ctrl2"), ui, transform) {
-                return true;
-            }
+            p_act.drag(p); // ctrl point move follows main point
+            let mut out_act =
+                PointInteract::new(p, id.with("out"), ui, transform, CORNEL_POINT.out_ctrl.size);
+            out_act.drag(p);
+            out_act.context_menu(|ui| {
+                controls(p, ui, "Out ctrl");
+
+                if ui.button("Delete").clicked() {
+                    delete_out = true;
+                    ui.close_menu();
+                }
+            });
+        }
+        if delete_out {
+            self.out_ctrl.take();
         }
 
-        false
+        action
     }
 
-    pub fn ui(&mut self, ui: &mut Ui) {
+    pub fn controls(&mut self, ui: &mut Ui) {
         controls(&mut self.point, ui, "Point");
         if let Some(p) = self.in_ctrl.as_mut() {
-            controls(p, ui, "In Ctrl");
+            controls(p, ui, "In ctrl");
         }
         if let Some(p) = self.out_ctrl.as_mut() {
-            controls(p, ui, "Out Ctrl");
+            controls(p, ui, "Out ctrl");
         }
     }
 }
 
+#[derive(Clone)]
 pub struct SmoothPoint {
     point: PlotPoint,
     theta: f64,
@@ -202,29 +345,29 @@ pub struct SmoothPoint {
 }
 
 impl SmoothPoint {
-    pub fn new(point: PlotPoint, theta: f64, length: f64) -> Self {
-        Self::new_unchecked(point, theta % (2.0 * PI), length)
+    pub fn new(point: PlotPoint, theta: f64, in_length: f64, out_length: f64) -> Self {
+        Self::new_unchecked(point, theta % (360.0), in_length.abs(), out_length.abs())
     }
 
-    fn new_unchecked(point: PlotPoint, rad: f64, length: f64) -> Self {
+    fn new_unchecked(point: PlotPoint, rad: f64, in_length: f64, out_length: f64) -> Self {
         Self {
             point,
             theta: rad,
-            in_length: length,
-            out_length: length,
+            in_length,
+            out_length,
         }
     }
 
-    pub fn horizontal(point: PlotPoint, length: f64) -> Self {
-        Self::new_unchecked(point, 0.0, length)
+    pub fn horizontal(point: PlotPoint, in_length: f64, out_length: f64) -> Self {
+        Self::new_unchecked(point, 0.0, in_length.abs(), out_length.abs())
     }
 
-    pub fn vertical(point: PlotPoint, length: f64) -> Self {
-        Self::new_unchecked(point, PI / 2.0, length)
+    pub fn vertical(point: PlotPoint, in_length: f64, out_length: f64) -> Self {
+        Self::new_unchecked(point, 90.0, in_length.abs(), out_length.abs())
     }
 
     pub fn in_ctrl(&self) -> PlotPoint {
-        self.point.move_follow(self.theta + PI, self.in_length)
+        self.point.move_follow(self.theta + 180.0, self.in_length)
     }
 
     pub fn out_ctrl(&self) -> PlotPoint {
@@ -232,77 +375,151 @@ impl SmoothPoint {
     }
 
     pub fn plot(&self, plot: &mut PlotUi) {
-        self.point
-            .plot(plot, SMOOTH_MARK, MAIN_POINT_SIZE, MAIN_POINT_COLOR);
+        self.point.plot(plot, SMOOTH_POINT.point);
 
         let in_ctrl = self.in_ctrl();
         let out_ctrl = self.out_ctrl();
 
-        in_ctrl.plot(plot, CTRL_MARK, CTRL_POINT_SIZE, CTRL_2_COLOR);
-        out_ctrl.plot(plot, CTRL_MARK, CTRL_POINT_SIZE, CTRL_1_COLOR);
+        in_ctrl.plot(plot, SMOOTH_POINT.in_ctrl);
+        out_ctrl.plot(plot, SMOOTH_POINT.out_ctrl);
 
-        LineSegment::new(&self.point, &in_ctrl).plot(plot, CTRL_LINK_LINE_COLOR, 1.0);
-        LineSegment::new(&self.point, &out_ctrl).plot(plot, CTRL_LINK_LINE_COLOR, 1.0);
+        LineSegment::new(&self.point, &in_ctrl).plot(plot, SMOOTH_POINT.in_ctrl_link);
+        LineSegment::new(&self.point, &out_ctrl).plot(plot, SMOOTH_POINT.out_ctrl_link);
     }
 
-    pub fn drag(&mut self, ui: &mut Ui, id: Id, transform: PlotTransform) -> bool {
-        if drag(&mut self.point, id.with("point"), ui, transform) {
-            return true;
+    pub fn interact(
+        &mut self, ui: &mut Ui, id: Id, transform: PlotTransform,
+    ) -> Option<PointAction> {
+        let mut action = None;
+
+        let mut p_act = PointInteract::new(
+            &self.point,
+            id.with("point"),
+            ui,
+            transform,
+            SMOOTH_POINT.point.size,
+        );
+        p_act.drag(&mut self.point);
+        p_act.context_menu(|ui| {
+            self.controls(ui);
+
+            if ui.button("Convert to corner point").clicked() {
+                action.replace(PointAction::ConvertToCorner);
+                ui.close_menu();
+            }
+
+            if ui.button("Delete").clicked() {
+                action.replace(PointAction::Delete);
+                ui.close_menu();
+            }
+        });
+        if p_act.clicked() {
+            action.replace(PointAction::Click);
         }
 
-        // TODO: shift key make horizontal or vertical
         let mut in_ctrl = self.in_ctrl();
-        if drag(&mut in_ctrl, id.with("in_ctrl"), ui, transform) {
+        let mut in_act = PointInteract::new(
+            &in_ctrl,
+            id.with("in"),
+            ui,
+            transform,
+            SMOOTH_POINT.in_ctrl.size,
+        );
+        if in_act.drag(&mut in_ctrl) {
             let v = self.point.minus(&in_ctrl);
             (self.in_length, self.theta) = v.polar();
-            return true;
         }
+        in_act.context_menu(|ui| {
+            self.theta_control(ui);
+            self.in_length_control(ui);
+
+            if ui.button("Same length as out").clicked() {
+                self.in_length = self.out_length;
+                ui.close_menu();
+            }
+        });
 
         let mut out_ctrl = self.out_ctrl();
-        if drag(&mut out_ctrl, id.with("out_ctrl"), ui, transform) {
+        let mut out_act = PointInteract::new(
+            &out_ctrl,
+            id.with("out"),
+            ui,
+            transform,
+            SMOOTH_POINT.out_ctrl.size,
+        );
+        if out_act.drag(&mut out_ctrl) {
             let v = out_ctrl.minus(&self.point);
             (self.out_length, self.theta) = v.polar();
-            return true;
         }
+        out_act.context_menu(|ui| {
+            self.theta_control(ui);
+            self.out_length_control(ui);
 
-        false
+            if ui.button("Same length as in").clicked() {
+                self.out_length = self.in_length;
+                ui.close_menu();
+            }
+        });
+
+        action
     }
 
-    pub fn ui(&mut self, ui: &mut Ui) {
+    pub fn point_control(&mut self, ui: &mut Ui) {
         controls(&mut self.point, ui, "Point");
-        ui.add(
-            Slider::new(&mut self.theta, 0.0..=2.0 * PI)
-                .smart_aim(true)
-                .prefix("Theta: ")
-                .suffix(" rad"),
-        );
+    }
 
-        if ui
-            .add(
-                Slider::new(&mut self.in_length, 0.0..=100.0)
+    pub fn theta_control(&mut self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Theta: ");
+            ui.add(
+                Slider::new(&mut self.theta, 0.0..=360.0)
                     .smart_aim(true)
-                    .clamp_to_range(false)
-                    .prefix("In Ctrl: "),
-            )
-            .changed()
-        {
-            self.in_length = self.in_length.abs();
-        }
+                    .suffix("°"),
+            );
+        });
+    }
 
-        if ui
-            .add(
-                Slider::new(&mut self.out_length, 0.0..=100.0)
-                    .smart_aim(true)
-                    .clamp_to_range(false)
-                    .prefix("Out Ctrl: "),
-            )
-            .changed()
-        {
-            self.out_length = self.out_length.abs();
-        }
+    pub fn in_length_control(&mut self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
+            ui.label("In ctrl: ");
+            if ui
+                .add(
+                    Slider::new(&mut self.in_length, 0.0..=100.0)
+                        .smart_aim(true)
+                        .clamp_to_range(false),
+                )
+                .changed()
+            {
+                self.in_length = self.in_length.abs();
+            }
+        });
+    }
+
+    pub fn out_length_control(&mut self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Out ctrl: ");
+            if ui
+                .add(
+                    Slider::new(&mut self.out_length, 0.0..=100.0)
+                        .smart_aim(true)
+                        .clamp_to_range(false),
+                )
+                .changed()
+            {
+                self.out_length = self.out_length.abs();
+            }
+        });
+    }
+
+    pub fn controls(&mut self, ui: &mut Ui) {
+        self.point_control(ui);
+        self.theta_control(ui);
+        self.in_length_control(ui);
+        self.out_length_control(ui);
     }
 }
 
+#[derive(Clone)]
 pub enum CurvePoint {
     Corner(CornerPoint),
     Smooth(SmoothPoint),
@@ -337,17 +554,19 @@ impl CurvePoint {
         }
     }
 
-    pub fn drag(&mut self, ui: &mut Ui, id: Id, transform: PlotTransform) -> bool {
+    pub fn interact(
+        &mut self, ui: &mut Ui, id: Id, transform: PlotTransform,
+    ) -> Option<PointAction> {
         match self {
-            Self::Corner(c) => c.drag(ui, id, transform),
-            Self::Smooth(s) => s.drag(ui, id, transform),
+            Self::Corner(c) => c.interact(ui, id, transform),
+            Self::Smooth(s) => s.interact(ui, id, transform),
         }
     }
 
     pub fn ui(&mut self, ui: &mut Ui) {
         match self {
-            Self::Corner(c) => c.ui(ui),
-            Self::Smooth(s) => s.ui(ui),
+            Self::Corner(c) => c.controls(ui),
+            Self::Smooth(s) => s.controls(ui),
         }
     }
 }

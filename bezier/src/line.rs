@@ -1,5 +1,6 @@
-use eframe::epaint::Color32;
 use egui_plot::{PlotPoint, PlotPoints, PlotUi};
+
+use crate::option::LinePlotOption;
 
 pub struct LineSegment<'a> {
     start: &'a PlotPoint,
@@ -22,17 +23,17 @@ impl<'a> LineSegment<'a> {
         }
     }
 
-    pub fn curve(&self, color: Color32, width: f32) -> egui_plot::Line {
+    pub fn curve(&self, opt: LinePlotOption) -> egui_plot::Line {
         egui_plot::Line::new(PlotPoints::from_parametric_callback(
             self.parametric_function(),
             0.0..=1.0,
             2,
         ))
-        .color(color)
-        .width(width)
+        .color(opt.color)
+        .width(opt.width as f32)
     }
 
-    pub fn plot(&self, plot: &mut PlotUi, color: Color32, width: f32) {
-        plot.line(self.curve(color, width))
+    pub fn plot(&self, plot: &mut PlotUi, opt: LinePlotOption) {
+        plot.line(self.curve(opt))
     }
 }
