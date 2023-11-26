@@ -90,6 +90,7 @@ dependencies = [
  "eframe",
  "egui_plot",
  "log",
+ "roots",
  "wasm-bindgen-futures",
 ]
 
@@ -1186,6 +1187,12 @@ checksum = "4722d768eff46b75989dd134e5c353f0d6296e5aaa3132e776cbdb56be7731aa"
 dependencies = [
  "bitflags 1.3.2",
 ]
+
+[[package]]
+name = "roots"
+version = "0.0.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "082f11ffa03bbef6c2c6ea6bea1acafaade2fd9050ae0234ab44a2153742b058"
 
 [[package]]
 name = "same-file"

@@ -1,11 +1,13 @@
 use eframe::{
     egui::{CentralPanel, Context, Id, Key, Window},
+    epaint::Color32,
     App, Frame,
 };
-use egui_plot::{HPlacement, Plot};
+use egui_plot::{HPlacement, MarkerShape, Plot};
 
 use crate::{
-    point::{CornerPoint, SmoothPoint},
+    option::PointPlotOption,
+    point::{CornerPoint, PlotPointExt, SmoothPoint},
     shape::Shape,
 };
 
@@ -38,7 +40,20 @@ impl App for Application {
                 .include_y(10.0)
                 .y_axis_width(3)
                 .y_axis_position(HPlacement::Right)
-                .show(ui, |plot| self.shape.plot(plot));
+                .show(ui, |plot| {
+                    self.shape.plot(plot);
+
+                    if let Some(pos) = ctx.pointer_hover_pos() {
+                        let point = plot.transform().value_from_position(pos);
+                        if let Some((_, sp, _)) = self.shape.nearest_point_on_segment(&point) {
+                            sp.plot(plot, PointPlotOption {
+                                size: 10.0,
+                                mark: MarkerShape::Circle,
+                                color: Color32::KHAKI,
+                            })
+                        }
+                    }
+                });
 
             self.shape.interact(ui, id, resp);
         });

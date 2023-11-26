@@ -362,6 +362,7 @@ impl SmoothPoint {
         Self::new_unchecked(point, 0.0, in_length.abs(), out_length.abs())
     }
 
+    #[allow(dead_code)] // TODO: remove this
     pub fn vertical(point: PlotPoint, in_length: f64, out_length: f64) -> Self {
         Self::new_unchecked(point, 90.0, in_length.abs(), out_length.abs())
     }

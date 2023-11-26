@@ -1,5 +1,8 @@
-use eframe::egui::{CollapsingHeader, Id, Ui};
-use egui_plot::{PlotResponse, PlotTransform, PlotUi};
+use eframe::{
+    egui::{CollapsingHeader, Id, Ui},
+    epaint::Pos2,
+};
+use egui_plot::{PlotPoint, PlotResponse, PlotTransform, PlotUi};
 
 use crate::{
     bezier::Bezier,
@@ -33,6 +36,13 @@ impl<'a> Segment<'a> {
         }
     }
 
+    pub fn nearest_to(&self, target: &PlotPoint) -> Option<(PlotPoint, f64)> {
+        match self {
+            Self::Bezier(b) => b.nearest_to(target),
+            Self::Line(l) => l.nearest_to(target),
+        }
+    }
+
     pub fn plot(&self, plot: &mut PlotUi, opt: LinePlotOption) {
         match self {
             Self::Bezier(b) => b.plot(plot, opt),
@@ -42,10 +52,6 @@ impl<'a> Segment<'a> {
 }
 
 impl Shape {
-    pub fn push(&mut self, point: impl Into<CurvePoint>) {
-        self.points.push(point.into());
-    }
-
     pub fn toggle_close(&mut self) {
         self.close = !self.close;
     }
@@ -147,22 +153,47 @@ impl Shape {
                 }
             }
         }
+        if response.response.clicked() {
+            let Some(pos) = response.response.interact_pointer_pos() else {
+                return;
+            };
 
-        if response.response.clicked() && !self.close {
-            if let Some(pos) = response.response.interact_pointer_pos() {
-                let point = response.transform.value_from_position(pos);
-                self.push(CornerPoint::new(point))
+            let target = response.transform.value_from_position(pos);
+
+            let mut inserted = self.snap_to_segment(&target, pos, 12.0, response.transform);
+
+            if inserted.is_none() && !self.close {
+                inserted.replace((self.points.len() - 1, target));
+            }
+
+            if let Some((index, point)) = inserted {
+                self.points
+                    .insert(index + 1, CornerPoint::new(point).into());
             }
         }
     }
 
-    // TODO: click start point to close shape
-    pub fn nearest_point(&self, radius: f64) -> Option<usize> {
-        todo!()
+    pub fn snap_to_segment(
+        &self, target: &PlotPoint, pos: Pos2, radius: f64, transform: PlotTransform,
+    ) -> Option<(usize, PlotPoint)> {
+        let mut inserted = self.nearest_point_on_segment(target);
+
+        if let Some((_, p, _)) = inserted {
+            let p_pos = transform.position_from_point(&p);
+            if pos.distance(p_pos) > radius as f32 {
+                inserted.take();
+            }
+        }
+
+        inserted.map(|(i, p, _)| (i, p))
     }
 
-    pub fn nearest_segment(&self, radius: f64) -> Option<usize> {
-        todo!()
+    pub fn nearest_point_on_segment(&self, target: &PlotPoint) -> Option<(usize, PlotPoint, f64)> {
+        // TODO: bounding box clip
+        self.segments()
+            .enumerate()
+            .flat_map(|(i, s)| s.nearest_to(target).map(|(p, d)| (i, p, d)))
+            .min_by(|(_, _, d), (_, _, d2)| d.total_cmp(d2))
     }
 
     pub fn controls(&mut self, ui: &mut Ui, id: Id) {
