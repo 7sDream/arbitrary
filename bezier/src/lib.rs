@@ -1,3 +1,4 @@
-pub mod option;
-pub mod shape;
-pub mod segment;
+mod curve;
+mod shape;
+
+pub use self::{curve::*, shape::*};

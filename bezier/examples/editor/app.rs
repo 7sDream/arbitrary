@@ -1,14 +1,15 @@
-use bezier::{
-    option::PointPlotOption,
-    segment::{CornerPoint, PlotPointExt, SmoothPoint},
-    shape::Shape,
-};
+use bezier::{CornerPoint, Shape, SmoothPoint};
 use eframe::{
     egui::{CentralPanel, Context, Id, Key, Window},
     epaint::Color32,
     App, Frame,
 };
-use egui_plot::{HPlacement, MarkerShape, Plot};
+use egui_plot::{HPlacement, Plot};
+
+use crate::{
+    interact::ShapeInteract,
+    plot::{plot_point, plot_shape},
+};
 
 pub struct Application {
     shape: Shape,
@@ -24,14 +25,14 @@ impl App for Application {
                 .default_open(false)
                 .default_pos((16.0, 16.0))
                 .show(ctx, |ui| {
-                    self.shape.controls(ui, id.with("shape_data"));
+                    ShapeInteract::new(&mut self.shape).controls(ui, id.with("shape_data"));
                 });
 
             if ctx.input(|i| i.key_released(Key::C)) {
                 self.shape.toggle_close();
             }
 
-            let resp = Plot::new(id.with("shape_canvas"))
+            let response = Plot::new(id.with("shape_canvas"))
                 .data_aspect(1.0)
                 .include_x(-50.0)
                 .include_x(50.0)
@@ -41,22 +42,36 @@ impl App for Application {
                 .show_y(false)
                 .y_axis_width(3)
                 .y_axis_position(HPlacement::Right)
-                .show(ui, |plot| {
-                    self.shape.plot(plot);
+                .show(ui, |ui| {
+                    plot_shape(&self.shape, ui);
 
-                    if let Some(pos) = ctx.pointer_hover_pos() {
-                        let point = plot.transform().value_from_position(pos);
-                        if let Some((_, n)) = self.shape.nearest_point_on_segments(&point) {
-                            n.point.plot(plot, PointPlotOption {
+                    if ui.response().hovered() {
+                        let Some(target) = ui.pointer_coordinate() else {
+                            return None;
+                        };
+
+                        let pos = ui.transform().position_from_point(&target);
+
+                        let nearest = ShapeInteract::new(&mut self.shape)
+                            .snap_to_curve_with_radius(&target, pos, ui.transform(), 12.0);
+
+                        if let Some(ref n) = nearest {
+                            plot_point(&n.point, ui, crate::option::PointPlotOption {
+                                mark: egui_plot::MarkerShape::Diamond,
                                 size: 8.0,
-                                mark: MarkerShape::Circle,
-                                color: Color32::TEMPORARY_COLOR,
-                            })
+                                color: Color32::BLACK,
+                            });
+                        }
+
+                        if ui.response().clicked() {
+                            return Some((target, nearest));
                         }
                     }
+
+                    None
                 });
 
-            self.shape.interact(ui, id, resp);
+            ShapeInteract::new(&mut self.shape).interact(ui, id, response);
         });
     }
 }

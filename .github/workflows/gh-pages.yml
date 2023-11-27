@@ -47,8 +47,8 @@ jobs:
       - name: Build bezier
         run: |
           cd bezier
-          cargo build --target wasm32-unknown-unknown --release
-          wasm-bindgen ./target/wasm32-unknown-unknown/release/bezier.wasm --target web --no-typescript --out-dir .
+          cargo build --target wasm32-unknown-unknown --example editor --release
+          wasm-bindgen ./target/wasm32-unknown-unknown/release/examples/editor.wasm --target web --no-typescript --out-dir .
           rm -rf target
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v2
