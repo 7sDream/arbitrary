@@ -95,6 +95,7 @@
         import init from "./bezier.js";
         window.addEventListener('load', async () => {
             const { main } = await init();
+            document.querySelector("#center_text").remove();
             main();
         });
     </script>
