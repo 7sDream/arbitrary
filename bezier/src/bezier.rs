@@ -144,7 +144,8 @@ impl<'a> Bezier<'a> {
         // EVD decomposition to solve the origin polynomial
         let req = faer_evd::compute_evd_req::<f64>(
             size,
-            ComputeVectors::No, // we do not need eigenvectors
+            // TODO: figure out why this set to No will cause wasm32 OOM when calculating
+            ComputeVectors::Yes,
             Parallelism::None,
             EvdParams::default(),
         )
