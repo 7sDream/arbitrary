@@ -35,11 +35,26 @@ jobs:
           lfs: true
       - name: Setup Pages
         uses: actions/configure-pages@v3
+      - name: Install rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install wasm-bindgen-cli
+        run: |
+          cargo install wasm-bindgen-cli
+      - name: Install rust wasm32-unknown-unknown target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: wasm32-unknown-unknown
+      - name: Build bezier
+        run: |
+          cd bezier
+          cargo build --target wasm32-unknown-unknown --release
+          wasm-bindgen ./target/wasm32-unknown-unknown/release/bezier.wasm --target web --no-typescript --out-dir .
+          rm -rf target
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v2
         with:
           # Upload entire repository
-          path: '.'
+          path: "."
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v2
