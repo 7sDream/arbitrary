@@ -1,5 +1,4 @@
 use egui_plot::{PlotPoint, PlotPoints, PlotUi};
-use roots::Roots;
 
 use crate::option::LinePlotOption;
 
@@ -44,16 +43,20 @@ impl<'a> LineSegment<'a> {
 
     pub fn nearest_to(&self, target: &PlotPoint) -> Option<(PlotPoint, f64)> {
         let [a, b] = self.distance_derivative_coefficient(target);
-        let t = roots::find_roots_linear(a, b);
-        match t {
-            Roots::One([t]) if 0.0 < t && t < 1.0 => {
-                let f = self.parametric_function();
-                let (x, y) = f(t);
-                let d = (x - target.x).powi(2) + (y - target.y).powi(2);
-                Some(([x, y].into(), d.sqrt()))
-            }
-            _ => None,
+
+        if a == 0.0 {
+            return None;
         }
+
+        let t = -b / a;
+        if 0.0 < t && t < 1.0 {
+            let f = self.parametric_function();
+            let (x, y) = f(t);
+            let d = (x - target.x).powi(2) + (y - target.y).powi(2);
+            return Some(([x, y].into(), d.sqrt()));
+        }
+
+        None
     }
 
     pub fn curve(&self, opt: LinePlotOption) -> egui_plot::Line {

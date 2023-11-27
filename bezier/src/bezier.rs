@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 
 use egui_plot::{Line, PlotPoint, PlotPoints, PlotUi};
-use roots::SimpleConvergency;
 
 use crate::option::LinePlotOption;
 
@@ -118,44 +117,60 @@ impl<'a> Bezier<'a> {
     pub fn nearest_to(&self, target: &PlotPoint) -> Option<(PlotPoint, f64)> {
         let coefficients = self.distance_derivative_coefficient(target);
 
-        let zeros: Box<dyn Iterator<Item = f64>> = if coefficients[0] == 0.0 {
-            Box::new(
-                #[allow(clippy::unnecessary_to_owned)] // fake positive
-                roots::find_roots_quartic(
-                    coefficients[1],
-                    coefficients[2],
-                    coefficients[3],
-                    coefficients[4],
-                    coefficients[5],
-                )
-                .as_ref()
-                .to_vec()
-                .into_iter(),
-            )
-        } else {
-            let normalized = [
-                coefficients[1] / coefficients[0],
-                coefficients[2] / coefficients[0],
-                coefficients[3] / coefficients[0],
-                coefficients[4] / coefficients[0],
-                coefficients[5] / coefficients[0],
-            ]
-            .to_vec();
+        let mut degree: Option<usize> = None;
+        for (i, c) in coefficients.iter().enumerate() {
+            if *c != 0.0 {
+                degree.replace(i);
+                break;
+            }
+        }
 
-            Box::new(
-                roots::find_roots_sturm(&normalized, &mut SimpleConvergency::<f64> {
-                    max_iter: 1024,
-                    eps: 1e-6f64,
-                })
-                .into_iter()
-                .inspect(|x| {
-                    if let Err(e) = x {
-                        dbg!(e);
-                    }
-                })
-                .filter_map(Result::ok),
-            )
+        let d = match degree {
+            None | Some(5) => return None,
+            Some(d) => d,
         };
+
+        let mat_size = 5 - d;
+
+        let mat = faer_core::Mat::from_fn(mat_size, mat_size, |i, j| {
+            if j + 1 == mat_size {
+                -coefficients[5 - i] / coefficients[d]
+            } else if i == j + 1 {
+                1.0
+            } else {
+                0.0
+            }
+        });
+
+        let req = faer_evd::compute_evd_req::<f64>(
+            mat_size,
+            faer_evd::ComputeVectors::Yes,
+            faer_core::Parallelism::None,
+            faer_evd::EvdParams::default(),
+        )
+        .ok()?;
+
+        let mut buffer = vec![0u8; req.size_bytes()];
+        let mut s_re = faer_core::Mat::zeros(mat_size, 1);
+        let mut s_im = faer_core::Mat::zeros(mat_size, 1);
+        let mut u = faer_core::Mat::zeros(mat_size, mat_size);
+        faer_evd::compute_evd_real::<f64>(
+            mat.as_ref(),
+            s_re.as_mut(),
+            s_im.as_mut(),
+            Some(u.as_mut()),
+            faer_core::Parallelism::None,
+            dyn_stack::PodStack::new(&mut buffer),
+            faer_evd::EvdParams::default(),
+        );
+
+        let zeros = s_re
+            .col_as_slice(0)
+            .iter()
+            .copied()
+            .zip(s_im.col_as_slice(0).iter().copied())
+            .filter(|(_, im)| *im == 0.0)
+            .map(|(re, _)| re);
 
         let f = self.parametric_function();
 
