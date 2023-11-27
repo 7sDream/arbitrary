@@ -6,10 +6,8 @@ use eframe::{
 };
 use egui_plot::{PlotPoint, PlotPoints, PlotTransform, PlotUi, Points};
 
-use crate::{
-    line::LineSegment,
-    option::{PointPlotOption, CORNEL_POINT, SMOOTH_POINT},
-};
+use super::LineSegment;
+use crate::option::{PointPlotOption, CORNEL_POINT, SMOOTH_POINT};
 
 pub trait PlotPointExt {
     fn x(&self) -> f64;
@@ -375,6 +373,16 @@ impl SmoothPoint {
         self.point.move_follow(self.theta, self.out_length)
     }
 
+    pub fn update_in_ctrl(&mut self, val: &PlotPoint) {
+        let v = self.point.minus(&val);
+        (self.in_length, self.theta) = v.polar();
+    }
+
+    pub fn update_out_ctrl(&mut self, val: &PlotPoint) {
+        let v = val.minus(&self.point);
+        (self.out_length, self.theta) = v.polar();
+    }
+
     pub fn plot(&self, plot: &mut PlotUi) {
         self.point.plot(plot, SMOOTH_POINT.point);
 
@@ -427,8 +435,7 @@ impl SmoothPoint {
             SMOOTH_POINT.in_ctrl.size,
         );
         if in_act.drag(&mut in_ctrl) {
-            let v = self.point.minus(&in_ctrl);
-            (self.in_length, self.theta) = v.polar();
+            self.update_in_ctrl(&in_ctrl);
         }
         in_act.context_menu(|ui| {
             self.theta_control(ui);
@@ -449,8 +456,7 @@ impl SmoothPoint {
             SMOOTH_POINT.out_ctrl.size,
         );
         if out_act.drag(&mut out_ctrl) {
-            let v = out_ctrl.minus(&self.point);
-            (self.out_length, self.theta) = v.polar();
+            self.update_out_ctrl(&out_ctrl);
         }
         out_act.context_menu(|ui| {
             self.theta_control(ui);
@@ -534,18 +540,36 @@ impl CurvePoint {
         }
     }
 
-    pub fn in_ctrl(&self) -> Option<Cow<'_, PlotPoint>> {
+    pub fn in_ctrl<'a>(&'a self) -> Option<Cow<'a, PlotPoint>> {
         match self {
             Self::Corner(c) => c.in_ctrl.as_ref().map(Cow::Borrowed),
             Self::Smooth(s) => Some(Cow::Owned(s.in_ctrl())),
         }
     }
 
-    pub fn out_ctrl(&self) -> Option<Cow<'_, PlotPoint>> {
+    pub fn out_ctrl<'a>(&'a self) -> Option<Cow<'a, PlotPoint>> {
         match self {
             Self::Corner(c) => c.out_ctrl.as_ref().map(Cow::Borrowed),
             Self::Smooth(s) => Some(Cow::Owned(s.out_ctrl())),
         }
+    }
+
+    pub fn set_in_ctrl(&mut self, val: PlotPoint) {
+        match self {
+            Self::Corner(c) => {
+                c.in_ctrl.replace(val);
+            }
+            Self::Smooth(s) => s.update_in_ctrl(&val),
+        };
+    }
+
+    pub fn set_out_ctrl(&mut self, val: PlotPoint) {
+        match self {
+            Self::Corner(c) => {
+                c.out_ctrl.replace(val);
+            }
+            Self::Smooth(s) => s.update_out_ctrl(&val),
+        };
     }
 
     pub fn plot(&self, plot: &mut PlotUi) {

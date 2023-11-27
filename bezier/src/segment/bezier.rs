@@ -5,9 +5,27 @@ use egui_plot::{Line, PlotPoint, PlotPoints, PlotUi};
 use faer_core::{Mat, Parallelism};
 use faer_evd::{ComputeVectors, EvdParams};
 
+use super::Nearest;
 use crate::option::LinePlotOption;
 
-#[derive(Clone)]
+pub struct BezierOwned {
+    pub start: PlotPoint,
+    pub end: PlotPoint,
+    pub ctrl1: PlotPoint,
+    pub ctrl2: PlotPoint,
+}
+
+impl BezierOwned {
+    pub fn as_bezier(&self) -> Bezier<'_> {
+        Bezier {
+            start: &self.start,
+            end: &self.end,
+            ctrl1: Cow::Borrowed(&self.ctrl1),
+            ctrl2: Cow::Borrowed(&self.ctrl2),
+        }
+    }
+}
+
 pub struct Bezier<'a> {
     pub start: &'a PlotPoint,
     pub end: &'a PlotPoint,
@@ -101,7 +119,7 @@ impl<'a> Bezier<'a> {
     //    that interval. But may not find the nearest point if segments count too less
     // 2. Improved Algebraic Method: https://inria.hal.science/file/index/docid/518379/filename/Xiao-DiaoChen2007c.pdf
     //    But the Sturm sequence seems hard to construct/understand.
-    pub fn nearest_to(&self, target: &PlotPoint) -> Option<(PlotPoint, f64)> {
+    pub fn nearest_to(&self, target: &PlotPoint) -> Option<Nearest> {
         let coefficients = self.distance_derivative_coefficient(target);
 
         // find the degree of function, remove leading zeros
@@ -182,10 +200,53 @@ impl<'a> Bezier<'a> {
             .map(|t| {
                 let (x, y) = f(t);
                 let d = (x - target.x).powi(2) + (y - target.y).powi(2);
-                ([x, y].into(), d)
+                (t, [x, y].into(), d)
             })
-            .min_by(|(_, d), (_, d2)| d.total_cmp(d2))
-            .map(|(p, d)| (p, d.sqrt()))
+            .min_by(|(_, _, d), (_, _, d2)| d.total_cmp(d2))
+            .map(|(t, point, d2)| Nearest {
+                t,
+                point,
+                distance: d2.sqrt(),
+            })
+    }
+
+    pub fn split_at(&self, t: f64) -> (BezierOwned, BezierOwned) {
+        let f = self.parametric_function();
+        let (x, y) = f(t);
+        let p: PlotPoint = [x, y].into();
+
+        let nt = 1.0 - t;
+        let t2 = t * t;
+        let _2tnt = 2.0 * t * nt;
+        let nt2 = nt * nt;
+
+        let left = BezierOwned {
+            start: *self.start,
+            end: p,
+            ctrl1: PlotPoint::new(
+                t * self.ctrl1.x + nt * self.start.x,
+                t * self.ctrl1.y + nt * self.start.y,
+            ),
+            ctrl2: PlotPoint::new(
+                t2 * self.ctrl2.x + _2tnt * self.ctrl1.x + nt2 * self.start.x,
+                t2 * self.ctrl2.y + _2tnt * self.ctrl1.y + nt2 * self.start.y,
+            ),
+        };
+
+        let right = BezierOwned {
+            start: p,
+            end: *self.end,
+            ctrl1: PlotPoint::new(
+                t2 * self.end.x + _2tnt * self.ctrl2.x + nt2 * self.ctrl1.x,
+                t2 * self.end.y + _2tnt * self.ctrl2.y + nt2 * self.ctrl1.y,
+            ),
+            ctrl2: PlotPoint::new(
+                t * self.end.x + nt * self.ctrl2.x,
+                t * self.end.y + nt * self.ctrl2.y,
+            ),
+        };
+
+        (left, right)
     }
 
     pub fn curve(&self, opt: LinePlotOption) -> Line {

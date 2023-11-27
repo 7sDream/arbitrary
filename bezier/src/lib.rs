@@ -1,9 +1,3 @@
-mod app;
-mod option;
-
-mod point;
-mod line;
-mod bezier;
-mod shape;
-
-pub use app::Application;
+pub mod option;
+pub mod shape;
+pub mod segment;

@@ -5,43 +5,14 @@ use eframe::{
 use egui_plot::{PlotPoint, PlotResponse, PlotTransform, PlotUi};
 
 use crate::{
-    bezier::Bezier,
-    line::LineSegment,
     option::{BEZIER_CURVE, LINE_CURVE},
-    point::{CornerPoint, CurvePoint, PlotPointExt, PointAction, SmoothPoint},
+    segment::{CornerPoint, CurvePoint, Nearest, PlotPointExt, PointAction, Segment, SmoothPoint},
 };
 
 #[derive(Default)]
 pub struct Shape {
     points: Vec<CurvePoint>,
     close: bool,
-}
-
-pub enum Segment<'a> {
-    Line(LineSegment<'a>),
-    Bezier(Bezier<'a>),
-}
-
-impl<'a> Segment<'a> {
-    pub fn new(start: &'a CurvePoint, end: &'a CurvePoint) -> Self {
-        let sp = start.point();
-        let ep = end.point();
-
-        match (start.out_ctrl(), end.in_ctrl()) {
-            (Some(ctrl1), Some(ctrl2)) => Segment::Bezier(Bezier::new(sp, ctrl1, ctrl2, ep)),
-            (Some(ctrl), None) | (None, Some(ctrl)) => {
-                Segment::Bezier(Bezier::new_quad(sp, ctrl.as_ref(), ep))
-            }
-            (None, None) => Segment::Line(LineSegment::new(sp, ep)),
-        }
-    }
-
-    pub fn nearest_to(&self, target: &PlotPoint) -> Option<(PlotPoint, f64)> {
-        match self {
-            Self::Bezier(b) => b.nearest_to(target),
-            Self::Line(l) => l.nearest_to(target),
-        }
-    }
 }
 
 impl Shape {
@@ -156,40 +127,50 @@ impl Shape {
 
             let target = response.transform.value_from_position(pos);
 
-            let mut inserted = self.snap_to_segment(&target, pos, 12.0, response.transform);
+            let inserted = self.snap_to_segment(&target, pos, 12.0, response.transform);
 
-            if inserted.is_none() && !self.close {
-                inserted.replace((self.points.len() - 1, target));
-            }
-
-            if let Some((index, point)) = inserted {
-                self.points
-                    .insert(index + 1, CornerPoint::new(point).into());
+            if let Some((i, n)) = inserted {
+                let segment = self.segments().nth(i).unwrap();
+                match segment {
+                    Segment::Bezier(b) => {
+                        let l = self.points.len();
+                        let (left, right) = b.split_at(n.t);
+                        self.points[i].set_out_ctrl(left.ctrl1);
+                        self.points[(i + 1) % l].set_in_ctrl(right.ctrl2);
+                        let mut p = SmoothPoint::horizontal(n.point, 1.0, 1.0);
+                        p.update_in_ctrl(&left.ctrl2);
+                        p.update_out_ctrl(&right.ctrl1);
+                        self.points.insert(i + 1, p.into());
+                    }
+                    Segment::Line(_) => self.points.insert(i + 1, CornerPoint::new(target).into()),
+                }
+            } else if !self.close {
+                self.points.push(CornerPoint::new(target).into());
             }
         }
     }
 
     pub fn snap_to_segment(
         &self, target: &PlotPoint, pos: Pos2, radius: f64, transform: PlotTransform,
-    ) -> Option<(usize, PlotPoint)> {
-        let mut inserted = self.nearest_point_on_segments(target);
+    ) -> Option<(usize, Nearest)> {
+        let mut nearest = self.nearest_point_on_segments(target);
 
-        if let Some((_, p, _)) = inserted {
-            let p_pos = transform.position_from_point(&p);
+        if let Some((_, ref n)) = nearest {
+            let p_pos = transform.position_from_point(&n.point);
             if pos.distance(p_pos) > radius as f32 {
-                inserted.take();
+                nearest.take();
             }
         }
 
-        inserted.map(|(i, p, _)| (i, p))
+        nearest
     }
 
-    pub fn nearest_point_on_segments(&self, target: &PlotPoint) -> Option<(usize, PlotPoint, f64)> {
+    pub fn nearest_point_on_segments(&self, target: &PlotPoint) -> Option<(usize, Nearest)> {
         // TODO: bounding box clip
         self.segments()
             .enumerate()
-            .flat_map(|(i, s)| s.nearest_to(target).map(|(p, d)| (i, p, d)))
-            .min_by(|(_, _, d), (_, _, d2)| d.total_cmp(d2))
+            .flat_map(|(i, s)| s.nearest_to(target).map(|p| (i, p)))
+            .min_by(|(_, a), (_, b)| a.distance.total_cmp(&b.distance))
     }
 
     pub fn controls(&mut self, ui: &mut Ui, id: Id) {

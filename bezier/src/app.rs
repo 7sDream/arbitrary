@@ -1,15 +1,14 @@
+use bezier::{
+    option::PointPlotOption,
+    segment::{CornerPoint, PlotPointExt, SmoothPoint},
+    shape::Shape,
+};
 use eframe::{
     egui::{CentralPanel, Context, Id, Key, Window},
     epaint::Color32,
     App, Frame,
 };
 use egui_plot::{HPlacement, MarkerShape, Plot};
-
-use crate::{
-    option::PointPlotOption,
-    point::{CornerPoint, PlotPointExt, SmoothPoint},
-    shape::Shape,
-};
 
 pub struct Application {
     shape: Shape,
@@ -47,8 +46,8 @@ impl App for Application {
 
                     if let Some(pos) = ctx.pointer_hover_pos() {
                         let point = plot.transform().value_from_position(pos);
-                        if let Some((_, sp, _)) = self.shape.nearest_point_on_segments(&point) {
-                            sp.plot(plot, PointPlotOption {
+                        if let Some((_, n)) = self.shape.nearest_point_on_segments(&point) {
+                            n.point.plot(plot, PointPlotOption {
                                 size: 8.0,
                                 mark: MarkerShape::Circle,
                                 color: Color32::TEMPORARY_COLOR,

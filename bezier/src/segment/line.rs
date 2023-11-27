@@ -1,6 +1,6 @@
 use egui_plot::{PlotPoint, PlotPoints, PlotUi};
 
-use crate::option::LinePlotOption;
+use crate::{option::LinePlotOption, segment::Nearest};
 
 pub struct LineSegment<'a> {
     start: &'a PlotPoint,
@@ -41,7 +41,7 @@ impl<'a> LineSegment<'a> {
         [ax + ay, bx + by]
     }
 
-    pub fn nearest_to(&self, target: &PlotPoint) -> Option<(PlotPoint, f64)> {
+    pub fn nearest_to(&self, target: &PlotPoint) -> Option<Nearest> {
         let [a, b] = self.distance_derivative_coefficient(target);
 
         if a == 0.0 {
@@ -53,7 +53,11 @@ impl<'a> LineSegment<'a> {
             let f = self.parametric_function();
             let (x, y) = f(t);
             let d = (x - target.x).powi(2) + (y - target.y).powi(2);
-            return Some(([x, y].into(), d.sqrt()));
+            return Some(Nearest {
+                t,
+                point: [x, y].into(),
+                distance: d.sqrt(),
+            });
         }
 
         None

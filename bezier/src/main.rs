@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod app;
+
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
     use eframe::{egui::ViewportBuilder, NativeOptions};
@@ -10,7 +12,7 @@ fn main() -> eframe::Result<()> {
             viewport: ViewportBuilder::default().with_inner_size((640.0, 480.0)),
             ..NativeOptions::default()
         },
-        Box::new(bezier::Application::create),
+        Box::new(app::Application::create),
     )
 }
 
@@ -26,7 +28,7 @@ fn main() {
             .start(
                 "canvas", // hardcode it
                 web_options,
-                Box::new(bezier::Application::create),
+                Box::new(app::Application::create),
             )
             .await
             .expect("failed to start app");
