@@ -1,6 +1,9 @@
 use std::borrow::Cow;
 
+use dyn_stack::PodStack;
 use egui_plot::{Line, PlotPoint, PlotPoints, PlotUi};
+use faer_core::{Mat, Parallelism};
+use faer_evd::{ComputeVectors, EvdParams};
 
 use crate::option::LinePlotOption;
 
@@ -39,26 +42,6 @@ impl<'a> Bezier<'a> {
             ctrl2: Cow::Owned(calc(end, ctrl)),
         }
     }
-
-    // fn parametric_function(&self) -> impl Fn(f64) -> (f64, f64) {
-    //     let start = *self.start;
-    //     let end = *self.end;
-    //     let ctrl1 = self.ctrl1.clone().into_owned();
-    //     let ctrl2 = self.ctrl2.clone().into_owned();
-
-    //     move |t| {
-    //         let nt = 1.0 - t;
-    //         let x = start.x * nt.powi(3)
-    //             + 3.0 * ctrl1.x * t * nt.powi(2)
-    //             + 3.0 * ctrl2.x * t.powi(2) * nt
-    //             + end.x * t.powi(3);
-    //         let y = start.y * nt.powi(3)
-    //             + 3.0 * ctrl1.y * t * nt.powi(2)
-    //             + 3.0 * ctrl2.y * t.powi(2) * nt
-    //             + end.y * t.powi(3);
-    //         (x, y)
-    //     }
-    // }
 
     fn parametric_function_coefficient(&self) -> [PlotPoint; 4] {
         let ax = -self.start.x + 3.0 * self.ctrl1.x - 3.0 * self.ctrl2.x + self.end.x;
@@ -113,10 +96,15 @@ impl<'a> Bezier<'a> {
         [ax + ay, bx + by, cx + cy, dx + dy, ex + ey, fx + fy]
     }
 
-    // TODO: not robust enough, should find another way
+    // TODO: This may not the fastest way. Alternative are:
+    // 1. subdivided into line segments, find minimal distance interval, then use Newton's Method in
+    //    that interval. But may not find the nearest point if segments count too less
+    // 2. Improved Algebraic Method: https://inria.hal.science/file/index/docid/518379/filename/Xiao-DiaoChen2007c.pdf
+    //    But the Sturm sequence seems hard to construct/understand.
     pub fn nearest_to(&self, target: &PlotPoint) -> Option<(PlotPoint, f64)> {
         let coefficients = self.distance_derivative_coefficient(target);
 
+        // find the degree of function, remove leading zeros
         let mut degree: Option<usize> = None;
         for (i, c) in coefficients.iter().enumerate() {
             if *c != 0.0 {
@@ -125,15 +113,26 @@ impl<'a> Bezier<'a> {
             }
         }
 
+        // if all coefficients is zero, or only contains constant item
+        // we assume there is no nearest point
         let d = match degree {
             None | Some(5) => return None,
             Some(d) => d,
         };
 
-        let mat_size = 5 - d;
+        // size of companion matrix
+        let size = 5 - d;
 
-        let mat = faer_core::Mat::from_fn(mat_size, mat_size, |i, j| {
-            if j + 1 == mat_size {
+        // construct the companion matrix of polynomial
+        // a_{0..n-1} is **normalized** coefficients, from low to high degree
+        //
+        // 0.0 0.0 ... 0.0 -a_0
+        // 1.0 0.0 ... 0.0 -a_1
+        // 0.0 1.0 ... 0.0 -a_2
+        // ... ... ... ... ...
+        // 0.0 0.0 ... 1.0 -a_{n-1}
+        let mat = Mat::from_fn(size, size, |i, j| {
+            if j + 1 == size {
                 -coefficients[5 - i] / coefficients[d]
             } else if i == j + 1 {
                 1.0
@@ -142,48 +141,50 @@ impl<'a> Bezier<'a> {
             }
         });
 
+        // EVD decomposition to solve the origin polynomial
         let req = faer_evd::compute_evd_req::<f64>(
-            mat_size,
-            faer_evd::ComputeVectors::Yes,
-            faer_core::Parallelism::None,
-            faer_evd::EvdParams::default(),
+            size,
+            ComputeVectors::No, // we do not need eigenvectors
+            Parallelism::None,
+            EvdParams::default(),
         )
         .ok()?;
 
+        // TODO: make buffer poll for this maybe
         let mut buffer = vec![0u8; req.size_bytes()];
-        let mut s_re = faer_core::Mat::zeros(mat_size, 1);
-        let mut s_im = faer_core::Mat::zeros(mat_size, 1);
-        let mut u = faer_core::Mat::zeros(mat_size, mat_size);
+        let mut re = Mat::zeros(size, 1);
+        let mut im = Mat::zeros(size, 1);
+
         faer_evd::compute_evd_real::<f64>(
             mat.as_ref(),
-            s_re.as_mut(),
-            s_im.as_mut(),
-            Some(u.as_mut()),
-            faer_core::Parallelism::None,
-            dyn_stack::PodStack::new(&mut buffer),
-            faer_evd::EvdParams::default(),
+            re.as_mut(),
+            im.as_mut(),
+            None, // we do not need eigenvectors
+            Parallelism::None,
+            PodStack::new(&mut buffer),
+            EvdParams::default(),
         );
 
-        let zeros = s_re
+        // We only need real root between (0, 1)
+        let zeros = re
             .col_as_slice(0)
             .iter()
             .copied()
-            .zip(s_im.col_as_slice(0).iter().copied())
-            .filter(|(_, im)| *im == 0.0)
+            .zip(im.col_as_slice(0).iter().copied())
+            .filter(|(re, im)| 0.0 < *re && *re < 1.0 && *im == 0.0)
             .map(|(re, _)| re);
 
+        // Compare all found roots, find the minimal distance
         let f = self.parametric_function();
 
         zeros
-            .filter(|x| *x > 0.0 && *x < 1.0)
-            // .chain(std::iter::once(0.0))
-            // .chain(std::iter::once(1.0))
             .map(|t| {
                 let (x, y) = f(t);
                 let d = (x - target.x).powi(2) + (y - target.y).powi(2);
-                ([x, y].into(), d.sqrt())
+                ([x, y].into(), d)
             })
             .min_by(|(_, d), (_, d2)| d.total_cmp(d2))
+            .map(|(p, d)| (p, d.sqrt()))
     }
 
     pub fn curve(&self, opt: LinePlotOption) -> Line {

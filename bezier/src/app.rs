@@ -38,6 +38,8 @@ impl App for Application {
                 .include_x(50.0)
                 .include_y(-30.0)
                 .include_y(10.0)
+                .show_x(false)
+                .show_y(false)
                 .y_axis_width(3)
                 .y_axis_position(HPlacement::Right)
                 .show(ui, |plot| {
@@ -45,11 +47,11 @@ impl App for Application {
 
                     if let Some(pos) = ctx.pointer_hover_pos() {
                         let point = plot.transform().value_from_position(pos);
-                        if let Some((_, sp, _)) = self.shape.nearest_point_on_segment(&point) {
+                        if let Some((_, sp, _)) = self.shape.nearest_point_on_segments(&point) {
                             sp.plot(plot, PointPlotOption {
-                                size: 10.0,
+                                size: 8.0,
                                 mark: MarkerShape::Circle,
-                                color: Color32::KHAKI,
+                                color: Color32::TEMPORARY_COLOR,
                             })
                         }
                     }

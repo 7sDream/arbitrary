@@ -7,7 +7,7 @@ use egui_plot::{PlotPoint, PlotResponse, PlotTransform, PlotUi};
 use crate::{
     bezier::Bezier,
     line::LineSegment,
-    option::{LinePlotOption, CURVE},
+    option::{BEZIER_CURVE, LINE_CURVE},
     point::{CornerPoint, CurvePoint, PlotPointExt, PointAction, SmoothPoint},
 };
 
@@ -40,13 +40,6 @@ impl<'a> Segment<'a> {
         match self {
             Self::Bezier(b) => b.nearest_to(target),
             Self::Line(l) => l.nearest_to(target),
-        }
-    }
-
-    pub fn plot(&self, plot: &mut PlotUi, opt: LinePlotOption) {
-        match self {
-            Self::Bezier(b) => b.plot(plot, opt),
-            Self::Line(l) => l.plot(plot, opt),
         }
     }
 }
@@ -85,7 +78,10 @@ impl Shape {
         }
 
         for segment in self.segments() {
-            segment.plot(plot, CURVE);
+            match segment {
+                Segment::Bezier(b) => b.plot(plot, BEZIER_CURVE),
+                Segment::Line(l) => l.plot(plot, LINE_CURVE),
+            }
         }
     }
 
@@ -176,7 +172,7 @@ impl Shape {
     pub fn snap_to_segment(
         &self, target: &PlotPoint, pos: Pos2, radius: f64, transform: PlotTransform,
     ) -> Option<(usize, PlotPoint)> {
-        let mut inserted = self.nearest_point_on_segment(target);
+        let mut inserted = self.nearest_point_on_segments(target);
 
         if let Some((_, p, _)) = inserted {
             let p_pos = transform.position_from_point(&p);
@@ -188,7 +184,7 @@ impl Shape {
         inserted.map(|(i, p, _)| (i, p))
     }
 
-    pub fn nearest_point_on_segment(&self, target: &PlotPoint) -> Option<(usize, PlotPoint, f64)> {
+    pub fn nearest_point_on_segments(&self, target: &PlotPoint) -> Option<(usize, PlotPoint, f64)> {
         // TODO: bounding box clip
         self.segments()
             .enumerate()

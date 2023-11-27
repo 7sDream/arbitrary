@@ -10,6 +10,7 @@ pub struct PointPlotOption {
 pub struct LinePlotOption {
     pub width: f64,
     pub color: Color32,
+    pub samples: usize,
 }
 
 pub struct CurvePointPlotOption {
@@ -34,6 +35,7 @@ pub const CORNEL_POINT: CurvePointPlotOption = CurvePointPlotOption {
     in_ctrl_link: LinePlotOption {
         width: 1.0,
         color: Color32::DARK_GREEN,
+        samples: 2,
     },
     out_ctrl: PointPlotOption {
         mark: MarkerShape::Square,
@@ -43,6 +45,7 @@ pub const CORNEL_POINT: CurvePointPlotOption = CurvePointPlotOption {
     out_ctrl_link: LinePlotOption {
         width: 1.0,
         color: Color32::DARK_RED,
+        samples: 2,
     },
 };
 
@@ -60,6 +63,7 @@ pub const SMOOTH_POINT: CurvePointPlotOption = CurvePointPlotOption {
     in_ctrl_link: LinePlotOption {
         width: 1.0,
         color: Color32::DARK_GREEN,
+        samples: 2,
     },
     out_ctrl: PointPlotOption {
         mark: MarkerShape::Circle,
@@ -69,10 +73,18 @@ pub const SMOOTH_POINT: CurvePointPlotOption = CurvePointPlotOption {
     out_ctrl_link: LinePlotOption {
         width: 1.0,
         color: Color32::DARK_RED,
+        samples: 2,
     },
 };
 
-pub const CURVE: LinePlotOption = LinePlotOption {
+pub const BEZIER_CURVE: LinePlotOption = LinePlotOption {
     width: 2.0,
     color: Color32::BLUE,
+    samples: 64,
+};
+
+pub const LINE_CURVE: LinePlotOption = LinePlotOption {
+    width: 2.0,
+    color: Color32::BLUE,
+    samples: 2,
 };
