@@ -1,7 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
-mod option;
+mod configure;
 mod interact;
 mod plot;
 
@@ -10,7 +10,7 @@ fn main() -> eframe::Result<()> {
     use eframe::{egui::ViewportBuilder, NativeOptions};
 
     eframe::run_native(
-        "Bezier",
+        "Bezier Editor",
         NativeOptions {
             viewport: ViewportBuilder::default().with_inner_size((640.0, 480.0)),
             ..NativeOptions::default()

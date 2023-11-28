@@ -19,6 +19,7 @@ faer-core = { version = "0.15", default-features = false }
 faer-evd = { version = "0.15", default-features = false }
 
 [dev-dependencies]
+arc-swap = "1.6.0"
 eframe = { version = "0.24", default-features = false, features = [
     "glow",
     "wayland",

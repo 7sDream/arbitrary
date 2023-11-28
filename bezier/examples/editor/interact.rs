@@ -5,7 +5,7 @@ use eframe::{
 };
 use egui_plot::{PlotPoint, PlotResponse, PlotTransform};
 
-use crate::option::{CORNEL_POINT, SMOOTH_POINT};
+use crate::configure::{self, CurvePointPlotConfig};
 
 trait BezierPointExt {
     fn to_plot_point(&self) -> PlotPoint;
@@ -151,22 +151,24 @@ pub enum PointAction {
 struct CornerPointInteract<'a>(&'a mut CornerPoint);
 
 impl<'a> CornerPointInteract<'a> {
-    pub fn interact(
-        &mut self, ui: &mut Ui, id: Id, transform: &PlotTransform,
+    fn point_interact(
+        &mut self, ui: &mut Ui, id: Id, transform: &PlotTransform, opt: &CurvePointPlotConfig,
     ) -> Option<PointAction> {
         let mut action = None;
 
-        let mut p_act = PointInteract::new(
+        let mut act = PointInteract::new(
             self.0.point(),
             id.with("point"),
             ui,
             *transform,
-            CORNEL_POINT.point.size,
+            opt.point.size,
         );
-        if let Some(delta) = p_act.drag_delta() {
+
+        if let Some(delta) = act.drag_delta() {
             self.0.move_delta(delta, true);
         }
-        p_act.context_menu(|ui| {
+
+        act.context_menu(|ui| {
             self.controls(ui);
 
             if !self.0.has_in_ctrl() || !self.0.has_out_ctrl() {
@@ -218,14 +220,20 @@ impl<'a> CornerPointInteract<'a> {
                 ui.close_menu();
             }
         });
-        if p_act.clicked() {
+
+        if act.clicked() {
             action.replace(PointAction::Click);
         }
 
+        action
+    }
+
+    fn ctrl_interact(
+        &mut self, ui: &mut Ui, id: Id, transform: &PlotTransform, opt: &CurvePointPlotConfig,
+    ) {
         let mut delete_in = false;
         if let Some(p) = self.0.in_ctrl_mut() {
-            let mut in_act =
-                PointInteract::new(p, id.with("in"), ui, *transform, CORNEL_POINT.in_ctrl.size);
+            let mut in_act = PointInteract::new(p, id.with("in"), ui, *transform, opt.in_ctrl.size);
             in_act.drag(p);
             in_act.context_menu(|ui| {
                 controls_point(p, ui, "In ctrl");
@@ -242,13 +250,8 @@ impl<'a> CornerPointInteract<'a> {
 
         let mut delete_out = false;
         if let Some(p) = self.0.out_ctrl_mut() {
-            let mut out_act = PointInteract::new(
-                p,
-                id.with("out"),
-                ui,
-                *transform,
-                CORNEL_POINT.out_ctrl.size,
-            );
+            let mut out_act =
+                PointInteract::new(p, id.with("out"), ui, *transform, opt.out_ctrl.size);
             out_act.drag(p);
             out_act.context_menu(|ui| {
                 controls_point(p, ui, "Out ctrl");
@@ -261,6 +264,19 @@ impl<'a> CornerPointInteract<'a> {
         }
         if delete_out {
             self.0.remove_out_ctrl();
+        }
+    }
+
+    pub fn interact(
+        &mut self, ui: &mut Ui, id: Id, transform: &PlotTransform,
+    ) -> Option<PointAction> {
+        let conf = &configure::read();
+        let opt = &conf.plot.cornel;
+
+        let action = self.point_interact(ui, id, transform, opt);
+
+        if conf.view.show_ctrl {
+            self.ctrl_interact(ui, id, transform, opt);
         }
 
         action
@@ -284,44 +300,12 @@ impl<'a> CornerPointInteract<'a> {
 struct SmoothPointInteract<'a>(&'a mut SmoothPoint);
 
 impl<'a> SmoothPointInteract<'a> {
-    pub fn interact(
-        &mut self, ui: &mut Ui, id: Id, transform: &PlotTransform,
-    ) -> Option<PointAction> {
-        let mut action = None;
-
-        let mut p_act = PointInteract::new(
-            self.0.point(),
-            id.with("point"),
-            ui,
-            *transform,
-            SMOOTH_POINT.point.size,
-        );
-        p_act.drag(self.0.point_mut());
-        p_act.context_menu(|ui| {
-            self.controls(ui);
-
-            if ui.button("Convert to corner point").clicked() {
-                action.replace(PointAction::ConvertToCorner);
-                ui.close_menu();
-            }
-
-            if ui.button("Delete").clicked() {
-                action.replace(PointAction::Delete);
-                ui.close_menu();
-            }
-        });
-        if p_act.clicked() {
-            action.replace(PointAction::Click);
-        }
-
+    fn ctrl_interact(
+        &mut self, ui: &mut Ui, id: Id, transform: &PlotTransform, opt: &CurvePointPlotConfig,
+    ) {
         let mut in_ctrl = self.0.in_ctrl();
-        let mut in_act = PointInteract::new(
-            &in_ctrl,
-            id.with("in"),
-            ui,
-            *transform,
-            SMOOTH_POINT.in_ctrl.size,
-        );
+        let mut in_act =
+            PointInteract::new(&in_ctrl, id.with("in"), ui, *transform, opt.in_ctrl.size);
         if in_act.drag(&mut in_ctrl) {
             self.0.move_in_ctrl_to(&in_ctrl);
         }
@@ -336,13 +320,8 @@ impl<'a> SmoothPointInteract<'a> {
         });
 
         let mut out_ctrl = self.0.out_ctrl();
-        let mut out_act = PointInteract::new(
-            &out_ctrl,
-            id.with("out"),
-            ui,
-            *transform,
-            SMOOTH_POINT.out_ctrl.size,
-        );
+        let mut out_act =
+            PointInteract::new(&out_ctrl, id.with("out"), ui, *transform, opt.out_ctrl.size);
         if out_act.drag(&mut out_ctrl) {
             self.0.move_out_ctrl_to(&out_ctrl);
         }
@@ -355,6 +334,54 @@ impl<'a> SmoothPointInteract<'a> {
                 ui.close_menu();
             }
         });
+    }
+
+    fn point_interact(
+        &mut self, ui: &mut Ui, id: Id, transform: &PlotTransform, opt: &CurvePointPlotConfig,
+    ) -> Option<PointAction> {
+        let mut action = None;
+
+        let mut act = PointInteract::new(
+            self.0.point(),
+            id.with("point"),
+            ui,
+            *transform,
+            opt.point.size,
+        );
+
+        act.drag(self.0.point_mut());
+
+        act.context_menu(|ui| {
+            self.controls(ui);
+
+            if ui.button("Convert to corner point").clicked() {
+                action.replace(PointAction::ConvertToCorner);
+                ui.close_menu();
+            }
+
+            if ui.button("Delete").clicked() {
+                action.replace(PointAction::Delete);
+                ui.close_menu();
+            }
+        });
+        if act.clicked() {
+            action.replace(PointAction::Click);
+        }
+
+        action
+    }
+
+    pub fn interact(
+        &mut self, ui: &mut Ui, id: Id, transform: &PlotTransform,
+    ) -> Option<PointAction> {
+        let conf = &configure::read();
+        let opt = &conf.plot.smooth;
+
+        let action = self.point_interact(ui, id, transform, opt);
+
+        if conf.view.show_ctrl {
+            self.ctrl_interact(ui, id, transform, opt);
+        }
 
         action
     }

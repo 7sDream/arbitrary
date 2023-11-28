@@ -12,9 +12,9 @@ wasm-bindgen ./target/wasm32-unknown-unknown/release/examples/editor.wasm --targ
 ## TODO
 
 - [ ] 角点变平滑点时、新增控制点时尽量保证曲线不变
-- [ ] 不显示控制点
-- [ ] 颜色等配置
-- [ ] 导入导出
+- [ ] 曲线导入导出
 - [ ] 扫描线算法填充
 - [ ] 最近点算法优化
+- [ ] 配置面板UI
+- [ ] 配置保存
 - [ ] 文档

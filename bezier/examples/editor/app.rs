@@ -7,6 +7,7 @@ use eframe::{
 use egui_plot::{HPlacement, Plot};
 
 use crate::{
+    configure::{self, configure_window, PointPlotConfig},
     interact::ShapeInteract,
     plot::{plot_point, plot_shape},
 };
@@ -20,13 +21,17 @@ impl App for Application {
         let id = Id::new("app");
 
         CentralPanel::default().show(ctx, |ui| {
-            Window::new("Shape Data")
-                .auto_sized()
-                .default_open(false)
-                .default_pos((16.0, 16.0))
-                .show(ctx, |ui| {
-                    ShapeInteract::new(&mut self.shape).controls(ui, id.with("shape_data"));
-                });
+            configure_window(ctx);
+
+            if configure::read().windows.shape_data {
+                Window::new("Shape Data")
+                    .id(Id::new("shape_data_window"))
+                    .auto_sized()
+                    .default_open(false)
+                    .show(ctx, |ui| {
+                        ShapeInteract::new(&mut self.shape).controls(ui, id.with("shape_data"));
+                    });
+            }
 
             if ctx.input(|i| i.key_released(Key::C)) {
                 self.shape.toggle_close();
@@ -56,7 +61,7 @@ impl App for Application {
                             .snap_to_curve_with_radius(&target, pos, ui.transform(), 12.0);
 
                         if let Some(ref n) = nearest {
-                            plot_point(&n.point, ui, crate::option::PointPlotOption {
+                            plot_point(&n.point, ui, &PointPlotConfig {
                                 mark: egui_plot::MarkerShape::Diamond,
                                 size: 8.0,
                                 color: Color32::BLACK,
