@@ -1,3 +1,5 @@
+use alloc::vec;
+
 use dyn_stack::PodStack;
 use faer_core::{Mat, Parallelism};
 use faer_evd::{ComputeVectors, EvdParams};
@@ -36,7 +38,7 @@ impl Bezier {
         }
     }
 
-    fn parametric_function_coefficient(&self) -> [Point; 4] {
+    fn parametric_function_coefficients(&self) -> [Point; 4] {
         let ax = -self.start.0 + 3.0 * self.ctrl1.0 - 3.0 * self.ctrl2.0 + self.end.0;
         let ay = -self.start.1 + 3.0 * self.ctrl1.1 - 3.0 * self.ctrl2.1 + self.end.1;
         let bx = 3.0 * (self.start.0 - 2.0 * self.ctrl1.0 + self.ctrl2.0);
@@ -50,7 +52,7 @@ impl Bezier {
     }
 
     pub fn parametric_function(&self) -> impl Fn(f64) -> Point {
-        let [a, b, c, d] = self.parametric_function_coefficient();
+        let [a, b, c, d] = self.parametric_function_coefficients();
 
         move |t| {
             let t2 = t * t;
@@ -65,8 +67,8 @@ impl Bezier {
         self.parametric_function()(t)
     }
 
-    fn distance_derivative_coefficient(&self, target: &Point) -> [f64; 6] {
-        let [a, b, c, d] = self.parametric_function_coefficient();
+    fn distance_derivative_coefficients(&self, target: &Point) -> [f64; 6] {
+        let [a, b, c, d] = self.parametric_function_coefficients();
 
         let dtx = d.0 - target.0;
         let dty = d.1 - target.1;
@@ -161,7 +163,7 @@ impl Bezier {
 
     /// Calculate the nearest point on the segment to a provided target point.
     pub fn nearest_to(&self, target: &Point, allow_endpoint: bool) -> Option<Nearest> {
-        let coefficients = self.distance_derivative_coefficient(target);
+        let coefficients = self.distance_derivative_coefficients(target);
 
         if let Some((re, im)) = Self::solve_poly(coefficients) {
             // We only need real root between (0, 1) because we add endpoints according to param
@@ -191,6 +193,8 @@ impl Bezier {
     }
 
     pub fn split_at(&self, t: f64) -> (Self, Self) {
+        assert!((0.0..=1.0).contains(&t));
+
         let f = self.parametric_function();
         let p = f(t);
 

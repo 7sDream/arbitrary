@@ -22,7 +22,7 @@ impl BezierPointExt for Point {
     }
 
     fn from_plot_point(p: PlotPoint) -> Self {
-        Self::from_x_y(p.x, p.y)
+        [p.x, p.y].into()
     }
 }
 
@@ -84,10 +84,7 @@ impl PointInteract {
             if resp.dragged_by(PointerButton::Primary) {
                 let delta_pos = resp.drag_delta();
                 let d = self.transform.dvalue_dpos();
-                return Some(Point::from_x_y(
-                    delta_pos.x as f64 * d[0],
-                    delta_pos.y as f64 * d[1],
-                ));
+                return Some([delta_pos.x as f64 * d[0], delta_pos.y as f64 * d[1]].into());
             }
         }
 
@@ -175,19 +172,15 @@ impl<'a> CornerPointInteract<'a> {
                 ui.menu_button("Add", |ui| {
                     ui.add_enabled_ui(!self.0.has_in_ctrl(), |ui| {
                         if ui.button("In ctrl point").clicked() {
-                            self.0.update_in_ctrl(Point::from_x_y(
-                                self.0.point().x() - 10.0,
-                                self.0.point().y(),
-                            ));
+                            let p = [self.0.point().x() - 10.0, self.0.point().y()].into();
+                            self.0.update_in_ctrl(p);
                             ui.close_menu();
                         }
                     });
                     ui.add_enabled_ui(!self.0.has_out_ctrl(), |ui| {
                         if ui.button("Out ctrl point").clicked() {
-                            self.0.update_out_ctrl(Point::from_x_y(
-                                self.0.point().x() + 10.0,
-                                self.0.point().y(),
-                            ));
+                            let p = [self.0.point().x() + 10.0, self.0.point().y()].into();
+                            self.0.update_out_ctrl(p);
                             ui.close_menu();
                         }
                     });

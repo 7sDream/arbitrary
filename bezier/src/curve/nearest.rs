@@ -1,4 +1,4 @@
-use core::cmp::Ordering::Equal;
+use core::cmp::Ordering;
 
 use super::{point::PointExt, Bezier, Point, Segment};
 
@@ -18,27 +18,27 @@ impl PartialEq for Nearest {
 impl Eq for Nearest {}
 
 impl PartialOrd for Nearest {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl Ord for Nearest {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> Ordering {
         match self.distance.total_cmp(&other.distance) {
-            Equal => {}
+            Ordering::Equal => {}
             ord => return ord,
         }
         match self.index.cmp(&other.index) {
-            Equal => {}
+            Ordering::Equal => {}
             ord => return ord,
         }
         match self.t.total_cmp(&other.t) {
-            Equal => {}
+            Ordering::Equal => {}
             ord => return ord,
         }
         match self.point.0.total_cmp(&other.point.0) {
-            Equal => {}
+            Ordering::Equal => {}
             ord => return ord,
         }
         self.point.1.total_cmp(&other.point.1)

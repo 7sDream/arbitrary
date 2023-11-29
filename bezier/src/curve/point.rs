@@ -1,10 +1,8 @@
-use std::borrow::Cow;
+use alloc::borrow::Cow;
 
 pub type Point = (f64, f64);
 
-pub trait PointExt: Sized {
-    fn from_x_y(x: f64, y: f64) -> Self;
-
+pub trait PointExt: From<[f64; 2]> {
     fn x(&self) -> f64;
     fn y(&self) -> f64;
 
@@ -32,36 +30,43 @@ pub trait PointExt: Sized {
     }
 
     fn negative(&self) -> Self {
-        Self::from_x_y(-self.x(), -self.y())
-    }
-
-    fn minus(&self, rhs: &Self) -> Self {
-        Self::from_x_y(self.x() - rhs.x(), self.y() - rhs.y())
+        [-self.x(), -self.y()].into()
     }
 
     fn plus(&self, rhs: &Self) -> Self {
-        Self::from_x_y(self.x() + rhs.x(), self.y() + rhs.y())
+        [self.x() + rhs.x(), self.y() + rhs.y()].into()
+    }
+
+    fn minus(&self, rhs: &Self) -> Self {
+        [self.x() - rhs.x(), self.y() - rhs.y()].into()
     }
 
     fn move_follow(&self, dir: f64, length: f64) -> Self {
-        Self::from_x_y(
+        [
             self.x() + dir.to_radians().cos() * length,
             self.y() + dir.to_radians().sin() * length,
-        )
+        ]
+        .into()
     }
 }
 
 impl PointExt for Point {
-    fn from_x_y(x: f64, y: f64) -> Self {
-        (x, y)
-    }
-
     fn x(&self) -> f64 {
         self.0
     }
 
     fn y(&self) -> f64 {
         self.1
+    }
+}
+
+impl PointExt for [f64; 2] {
+    fn x(&self) -> f64 {
+        self[0]
+    }
+
+    fn y(&self) -> f64 {
+        self[1]
     }
 }
 

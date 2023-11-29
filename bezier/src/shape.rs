@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use crate::{
     curve::{Curve, CurvePoint, Nearest, Point},
     CornerPoint, SmoothPoint,
@@ -96,7 +98,7 @@ impl Shape {
         self.points
             .windows(2)
             .map(|curve| Curve::new(&curve[0], &curve[1]))
-            .chain(std::iter::from_fn(move || {
+            .chain(core::iter::from_fn(move || {
                 if !close_returned && self.close && self.points.len() >= 2 {
                     close_returned = true;
                     Some(Curve::new(

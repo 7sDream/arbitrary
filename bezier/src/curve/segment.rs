@@ -10,7 +10,7 @@ impl Segment {
         Self { start, end }
     }
 
-    fn parametric_function_coefficient(&self) -> [Point; 2] {
+    fn parametric_function_coefficients(&self) -> [Point; 2] {
         [
             (self.end.0 - self.start.0, self.end.1 - self.start.1),
             self.start,
@@ -18,7 +18,7 @@ impl Segment {
     }
 
     pub fn parametric_function(&self) -> impl Fn(f64) -> (f64, f64) {
-        let [a, b] = self.parametric_function_coefficient();
+        let [a, b] = self.parametric_function_coefficients();
 
         move |t| {
             let x = a.0 * t + b.0;
@@ -31,8 +31,8 @@ impl Segment {
         self.parametric_function()(t)
     }
 
-    fn distance_derivative_coefficient(&self, target: &Point) -> [f64; 2] {
-        let [a, b] = self.parametric_function_coefficient();
+    fn distance_derivative_coefficients(&self, target: &Point) -> [f64; 2] {
+        let [a, b] = self.parametric_function_coefficients();
 
         let ax = a.0 * a.0;
         let ay = a.1 * a.1;
@@ -44,7 +44,7 @@ impl Segment {
     }
 
     pub fn nearest_to(&self, target: &Point, allow_endpoint: bool) -> Option<Nearest> {
-        let [a, b] = self.distance_derivative_coefficient(target);
+        let [a, b] = self.distance_derivative_coefficients(target);
 
         let t = if a == 0.0 { 0.0 } else { -b / a };
 
