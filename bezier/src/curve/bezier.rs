@@ -4,17 +4,18 @@ use dyn_stack::PodStack;
 use faer_core::{Mat, Parallelism};
 use faer_evd::{ComputeVectors, EvdParams};
 
-use super::{Nearest, Point};
+use super::Nearest;
+use crate::Point2D;
 
-pub struct Bezier {
-    pub start: Point,
-    pub ctrl1: Point,
-    pub ctrl2: Point,
-    pub end: Point,
+pub struct Bezier<P> {
+    pub start: P,
+    pub ctrl1: P,
+    pub ctrl2: P,
+    pub end: P,
 }
 
-impl Bezier {
-    pub fn new(start: Point, ctrl1: Point, ctrl2: Point, end: Point) -> Self {
+impl<P> Bezier<P> {
+    pub fn new(start: P, ctrl1: P, ctrl2: P, end: P) -> Self {
         Self {
             start,
             end,
@@ -22,72 +23,64 @@ impl Bezier {
             ctrl2,
         }
     }
+}
 
-    pub fn new_quad(start: Point, ctrl: Point, end: Point) -> Self {
-        fn calc(a: &Point, b: &Point) -> Point {
-            let x = a.0 + 2.0 * (b.0 - a.0) / 3.0;
-            let y = a.1 + 2.0 * (b.1 - a.1) / 3.0;
-            (x, y)
-        }
-
-        Self {
-            start,
-            end,
-            ctrl1: calc(&start, &ctrl),
-            ctrl2: calc(&end, &ctrl),
-        }
+impl<P: Point2D> Bezier<P> {
+    fn quad_to_cubic(a: &P, b: &P) -> P {
+        b.minus(a).scale(2.0 / 3.0).plus(a)
     }
 
-    fn parametric_function_coefficients(&self) -> [Point; 4] {
-        let ax = -self.start.0 + 3.0 * self.ctrl1.0 - 3.0 * self.ctrl2.0 + self.end.0;
-        let ay = -self.start.1 + 3.0 * self.ctrl1.1 - 3.0 * self.ctrl2.1 + self.end.1;
-        let bx = 3.0 * (self.start.0 - 2.0 * self.ctrl1.0 + self.ctrl2.0);
-        let by = 3.0 * (self.start.1 - 2.0 * self.ctrl1.1 + self.ctrl2.1);
-        let cx = -3.0 * (self.start.0 - self.ctrl1.0);
-        let cy = -3.0 * (self.start.1 - self.ctrl1.1);
-        let dx = self.start.0;
-        let dy = self.start.1;
+    pub fn new_quad(start: P, ctrl: P, end: P) -> Self {
+        let ctrl1 = Self::quad_to_cubic(&start, &ctrl);
+        let ctrl2 = Self::quad_to_cubic(&end, &ctrl);
 
-        [(ax, ay), (bx, by), (cx, cy), (dx, dy)]
+        Self::new(start, ctrl1, ctrl2, end)
     }
 
-    pub fn parametric_function(&self) -> impl Fn(f64) -> Point {
+    fn parametric_function_coefficients(&self) -> [P; 4] {
+        [
+            self.start
+                .negative()
+                .plus(&self.ctrl1.minus(&self.ctrl2).scale(3.0))
+                .plus(&self.end),
+            self.start
+                .minus(&self.ctrl1.scale(2.0))
+                .plus(&self.ctrl2)
+                .scale(3.0),
+            self.start.minus(&self.ctrl1).scale(-3.0),
+            self.start.clone(),
+        ]
+    }
+
+    pub fn parametric_function(&self) -> impl Fn(f64) -> P {
         let [a, b, c, d] = self.parametric_function_coefficients();
 
         move |t| {
             let t2 = t * t;
             let t3 = t2 * t;
-            let x = a.0 * t3 + b.0 * t2 + c.0 * t + d.0;
-            let y = a.1 * t3 + b.1 * t2 + c.1 * t + d.1;
-            (x, y)
+
+            a.scale(t3).plus(&b.scale(t2)).plus(&c.scale(t)).plus(&d)
         }
     }
 
-    pub fn at(&self, t: f64) -> Point {
+    pub fn at(&self, t: f64) -> P {
+        assert!((0.0..=1.0).contains(&t));
         self.parametric_function()(t)
     }
 
-    fn distance_derivative_coefficients(&self, target: &Point) -> [f64; 6] {
+    fn distance_derivative_coefficients(&self, target: &P) -> [f64; 6] {
         let [a, b, c, d] = self.parametric_function_coefficients();
 
-        let dtx = d.0 - target.0;
-        let dty = d.1 - target.1;
+        let dt = d.minus(target);
 
-        let ax = 3.0 * a.0 * a.0;
-        let bx = 5.0 * a.0 * b.0;
-        let cx = 4.0 * a.0 * c.0 + 2.0 * b.0 * b.0;
-        let dx = 3.0 * a.0 * dtx + 3.0 * b.0 * c.0;
-        let ex = 2.0 * b.0 * dtx + c.0 * c.0;
-        let fx = c.0 * dtx;
-
-        let ay = 3.0 * a.1 * a.1;
-        let by = 5.0 * a.1 * b.1;
-        let cy = 4.0 * a.1 * c.1 + 2.0 * b.1 * b.1;
-        let dy = 3.0 * a.1 * dty + 3.0 * b.1 * c.1;
-        let ey = 2.0 * b.1 * dty + c.1 * c.1;
-        let fy = c.1 * dty;
-
-        [ax + ay, bx + by, cx + cy, dx + dy, ex + ey, fx + fy]
+        [
+            3.0 * a.dot(&a),
+            5.0 * a.dot(&b),
+            4.0 * a.dot(&c) + 2.0 * b.dot(&b),
+            3.0 * a.dot(&dt) + 3.0 * b.dot(&c),
+            2.0 * b.dot(&dt) + c.dot(&c),
+            c.dot(&dt),
+        ]
     }
 
     // TODO: This may not the fastest way. Alternative are:
@@ -160,9 +153,42 @@ impl Bezier {
 
         Some((re, im))
     }
+}
+
+impl<P: Point2D> Bezier<P> {
+    pub fn split_at(&self, t: f64) -> (Self, Self) {
+        let p = self.at(t);
+
+        let nt = 1.0 - t;
+        let t2 = t * t;
+        let _2tnt = 2.0 * t * nt;
+        let nt2 = nt * nt;
+
+        let left = Self::new(
+            self.start.clone(),
+            self.ctrl1.scale(t).plus(&self.start.scale(nt)),
+            self.ctrl2
+                .scale(t2)
+                .plus(&self.ctrl1.scale(_2tnt))
+                .plus(&self.start.scale(nt2)),
+            p.clone(),
+        );
+
+        let right = Self::new(
+            p,
+            self.end
+                .scale(t2)
+                .plus(&self.ctrl2.scale(_2tnt))
+                .plus(&self.ctrl1.scale(nt2)),
+            self.end.scale(t).plus(&self.ctrl2.scale(nt)),
+            self.end.clone(),
+        );
+
+        (left, right)
+    }
 
     /// Calculate the nearest point on the segment to a provided target point.
-    pub fn nearest_to(&self, target: &Point, allow_endpoint: bool) -> Option<Nearest> {
+    pub fn nearest_to(&self, target: &P, allow_endpoint: bool) -> Option<Nearest<P>> {
         let coefficients = self.distance_derivative_coefficients(target);
 
         if let Some((re, im)) = Self::solve_poly(coefficients) {
@@ -190,45 +216,5 @@ impl Bezier {
         } else {
             None
         }
-    }
-
-    pub fn split_at(&self, t: f64) -> (Self, Self) {
-        assert!((0.0..=1.0).contains(&t));
-
-        let f = self.parametric_function();
-        let p = f(t);
-
-        let nt = 1.0 - t;
-        let t2 = t * t;
-        let _2tnt = 2.0 * t * nt;
-        let nt2 = nt * nt;
-
-        let left = Self::new(
-            self.start,
-            (
-                t * self.ctrl1.0 + nt * self.start.0,
-                t * self.ctrl1.1 + nt * self.start.1,
-            ),
-            (
-                t2 * self.ctrl2.0 + _2tnt * self.ctrl1.0 + nt2 * self.start.0,
-                t2 * self.ctrl2.1 + _2tnt * self.ctrl1.1 + nt2 * self.start.1,
-            ),
-            p,
-        );
-
-        let right = Self::new(
-            p,
-            (
-                t2 * self.end.0 + _2tnt * self.ctrl2.0 + nt2 * self.ctrl1.0,
-                t2 * self.end.1 + _2tnt * self.ctrl2.1 + nt2 * self.ctrl1.1,
-            ),
-            (
-                t * self.end.0 + nt * self.ctrl2.0,
-                t * self.end.1 + nt * self.ctrl2.1,
-            ),
-            self.end,
-        );
-
-        (left, right)
     }
 }

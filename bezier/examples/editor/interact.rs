@@ -1,30 +1,14 @@
-use bezier::{CornerPoint, CurvePoint, Nearest, Point, PointExt, Shape, SmoothPoint};
+use bezier::{CornerPoint, CurvePoint, Nearest, Point2D, Shape, SmoothPoint};
 use eframe::{
     egui::{CollapsingHeader, DragValue, Id, PointerButton, Response, Sense, Slider, Ui},
     epaint::{Pos2, Rect, Vec2},
 };
-use egui_plot::{PlotPoint, PlotResponse, PlotTransform};
+use egui_plot::{PlotResponse, PlotTransform};
 
-use crate::configure::{self, CurvePointPlotConfig};
-
-trait BezierPointExt {
-    fn to_plot_point(&self) -> PlotPoint;
-
-    fn from_plot_point(p: PlotPoint) -> Self;
-}
-
-impl BezierPointExt for Point {
-    fn to_plot_point(&self) -> PlotPoint {
-        PlotPoint {
-            x: self.0,
-            y: self.1,
-        }
-    }
-
-    fn from_plot_point(p: PlotPoint) -> Self {
-        [p.x, p.y].into()
-    }
-}
+use crate::{
+    configure::{self, CurvePointPlotConfig},
+    point::Point,
+};
 
 struct PointInteract {
     transform: PlotTransform,
@@ -34,7 +18,7 @@ struct PointInteract {
 
 impl PointInteract {
     pub fn new(point: &Point, id: Id, ui: &Ui, transform: PlotTransform, size: f64) -> Self {
-        let pp = [point.0, point.1].into();
+        let pp = point.0;
 
         let position = transform.position_from_point(&pp);
 
@@ -53,10 +37,7 @@ impl PointInteract {
         let [x_max, y_max] = bound.max();
         let half = size / 2.0;
 
-        if point.x() + half < x_min
-            || point.x() - half > x_max
-            || point.y() + half < y_min
-            || point.y() - half > y_max
+        if pp.x + half < x_min || pp.x - half > x_max || pp.y + half < y_min || pp.y - half > y_max
         {
             return result;
         }
@@ -71,8 +52,7 @@ impl PointInteract {
 
     pub fn drag(&mut self, p: &mut Point) -> bool {
         if let Some(delta) = self.drag_delta() {
-            p.0 += delta.0;
-            p.1 += delta.1;
+            *p = p.plus(&delta);
             return true;
         }
 
@@ -84,7 +64,10 @@ impl PointInteract {
             if resp.dragged_by(PointerButton::Primary) {
                 let delta_pos = resp.drag_delta();
                 let d = self.transform.dvalue_dpos();
-                return Some([delta_pos.x as f64 * d[0], delta_pos.y as f64 * d[1]].into());
+                return Some(Point::from_xy(
+                    delta_pos.x as f64 * d[0],
+                    delta_pos.y as f64 * d[1],
+                ));
             }
         }
 
@@ -113,7 +96,7 @@ pub fn controls_point(p: &mut Point, ui: &mut Ui, text: &str) -> bool {
 
         if ui
             .add(
-                DragValue::new(&mut p.0)
+                DragValue::new(&mut p.0.x)
                     .prefix("x: ")
                     .update_while_editing(false),
             )
@@ -124,7 +107,7 @@ pub fn controls_point(p: &mut Point, ui: &mut Ui, text: &str) -> bool {
 
         if ui
             .add(
-                DragValue::new(&mut p.1)
+                DragValue::new(&mut p.0.y)
                     .prefix("y: ")
                     .update_while_editing(false),
             )
@@ -145,7 +128,7 @@ pub enum PointAction {
     ConvertToSmooth,
 }
 
-struct CornerPointInteract<'a>(&'a mut CornerPoint);
+struct CornerPointInteract<'a>(&'a mut CornerPoint<Point>);
 
 impl<'a> CornerPointInteract<'a> {
     fn point_interact(
@@ -172,14 +155,14 @@ impl<'a> CornerPointInteract<'a> {
                 ui.menu_button("Add", |ui| {
                     ui.add_enabled_ui(!self.0.has_in_ctrl(), |ui| {
                         if ui.button("In ctrl point").clicked() {
-                            let p = [self.0.point().x() - 10.0, self.0.point().y()].into();
+                            let p = Point::from_xy(self.0.point().x() - 10.0, self.0.point().y());
                             self.0.update_in_ctrl(p);
                             ui.close_menu();
                         }
                     });
                     ui.add_enabled_ui(!self.0.has_out_ctrl(), |ui| {
                         if ui.button("Out ctrl point").clicked() {
-                            let p = [self.0.point().x() + 10.0, self.0.point().y()].into();
+                            let p = Point::from_xy(self.0.point().x() + 10.0, self.0.point().y());
                             self.0.update_out_ctrl(p);
                             ui.close_menu();
                         }
@@ -290,7 +273,7 @@ impl<'a> CornerPointInteract<'a> {
     }
 }
 
-struct SmoothPointInteract<'a>(&'a mut SmoothPoint);
+struct SmoothPointInteract<'a>(&'a mut SmoothPoint<Point>);
 
 impl<'a> SmoothPointInteract<'a> {
     fn ctrl_interact(
@@ -443,7 +426,7 @@ impl<'a> SmoothPointInteract<'a> {
     }
 }
 
-struct CurvePointInteract<'a>(&'a mut CurvePoint);
+struct CurvePointInteract<'a>(&'a mut CurvePoint<Point>);
 
 impl<'a> CurvePointInteract<'a> {
     pub fn interact(
@@ -464,11 +447,11 @@ impl<'a> CurvePointInteract<'a> {
 }
 
 pub struct ShapeInteract<'a> {
-    shape: &'a mut Shape,
+    shape: &'a mut Shape<Point>,
 }
 
 impl<'a> ShapeInteract<'a> {
-    pub fn new(shape: &'a mut Shape) -> Self {
+    pub fn new(shape: &'a mut Shape<Point>) -> Self {
         Self { shape }
     }
 
@@ -556,14 +539,12 @@ impl<'a> ShapeInteract<'a> {
     }
 
     pub fn snap_to_curve_with_radius(
-        &self, target: &PlotPoint, pos: Pos2, transform: &PlotTransform, radius: f64,
-    ) -> Option<Nearest> {
-        let mut nearest = self
-            .shape
-            .nearest_point_on_curves(&Point::from_plot_point(*target), false);
+        &self, target: &Point, pos: Pos2, transform: &PlotTransform, radius: f64,
+    ) -> Option<Nearest<Point>> {
+        let mut nearest = self.shape.nearest_point_on_curves(target, false);
 
         if let Some(ref n) = nearest {
-            let p_pos = transform.position_from_point(&n.point.to_plot_point());
+            let p_pos = transform.position_from_point(&n.point.0);
             if pos.distance(p_pos) > radius as f32 {
                 nearest.take();
             }
@@ -572,7 +553,9 @@ impl<'a> ShapeInteract<'a> {
         nearest
     }
 
-    fn insert_nearest_without_calculation(&mut self, target: Point, nearest: Option<Nearest>) {
+    fn insert_nearest_without_calculation(
+        &mut self, target: Point, nearest: Option<Nearest<Point>>,
+    ) {
         if let Some(n) = nearest {
             self.shape.insert_on_curve(n.index, n.t);
         } else if !self.shape.closed() {
@@ -582,7 +565,7 @@ impl<'a> ShapeInteract<'a> {
 
     pub fn interact(
         &mut self, ui: &mut Ui, id: Id,
-        response: PlotResponse<Option<(PlotPoint, Option<Nearest>)>>,
+        response: PlotResponse<Option<(Point, Option<Nearest<Point>>)>>,
     ) {
         let mut act = None;
 
@@ -598,7 +581,7 @@ impl<'a> ShapeInteract<'a> {
         }
 
         if let Some((target, nearest)) = response.inner {
-            self.insert_nearest_without_calculation(Point::from_plot_point(target), nearest)
+            self.insert_nearest_without_calculation(target, nearest);
         }
     }
 }

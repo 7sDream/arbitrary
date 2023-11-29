@@ -1,17 +1,14 @@
 use alloc::vec::Vec;
 
-use crate::{
-    curve::{Curve, CurvePoint, Nearest, Point},
-    CornerPoint, SmoothPoint,
-};
+use crate::{CornerPoint, Curve, CurvePoint, Nearest, Point2D, SmoothPoint};
 
 #[derive(Default)]
-pub struct Shape {
-    points: Vec<CurvePoint>,
+pub struct Shape<P> {
+    points: Vec<CurvePoint<P>>,
     close: bool,
 }
 
-impl Shape {
+impl<P> Shape<P> {
     pub fn closed(&self) -> bool {
         self.close
     }
@@ -32,32 +29,59 @@ impl Shape {
         self.len() == 0
     }
 
-    pub fn points(&self) -> &[CurvePoint] {
+    pub fn points(&self) -> &[CurvePoint<P>] {
         &self.points
     }
 
-    pub fn points_mut(&mut self) -> &mut [CurvePoint] {
+    pub fn points_mut(&mut self) -> &mut [CurvePoint<P>] {
         &mut self.points
     }
 
     pub fn with_points<F>(&mut self, f: F)
     where
-        F: FnOnce(&mut Vec<CurvePoint>),
+        F: FnOnce(&mut Vec<CurvePoint<P>>),
     {
         f(&mut self.points)
     }
 
-    pub fn push(&mut self, point: CurvePoint) {
+    pub fn push(&mut self, point: CurvePoint<P>) {
         self.points.push(point);
     }
 
-    pub fn insert(&mut self, index: usize, point: CurvePoint) {
+    pub fn insert(&mut self, index: usize, point: CurvePoint<P>) {
         self.points.insert(index, point);
     }
 
-    pub fn insert_on_curve(&mut self, index: usize, t: f64) {
-        assert!((0.0..=1.0).contains(&t));
+    pub fn remove(&mut self, index: usize) {
+        self.points.remove(index);
+    }
 
+    pub fn replace(&mut self, index: usize, point: CurvePoint<P>) {
+        self.points[index] = point;
+    }
+}
+
+impl<P: Point2D> Shape<P> {
+    pub fn curves(&self) -> impl Iterator<Item = Curve<P>> + '_ {
+        let mut close_returned = false;
+
+        self.points
+            .windows(2)
+            .map(|curve| Curve::new(&curve[0], &curve[1]))
+            .chain(core::iter::from_fn(move || {
+                if !close_returned && self.close && self.points.len() >= 2 {
+                    close_returned = true;
+                    Some(Curve::new(
+                        self.points.last().unwrap(),
+                        self.points.first().unwrap(),
+                    ))
+                } else {
+                    None
+                }
+            }))
+    }
+
+    pub fn insert_on_curve(&mut self, index: usize, t: f64) {
         let curve = self.curves().nth(index).unwrap();
         let target = curve.at(t);
 
@@ -84,36 +108,9 @@ impl Shape {
         }
     }
 
-    pub fn remove(&mut self, index: usize) {
-        self.points.remove(index);
-    }
-
-    pub fn replace(&mut self, index: usize, point: CurvePoint) {
-        self.points[index] = point;
-    }
-
-    pub fn curves(&self) -> impl Iterator<Item = Curve> + '_ {
-        let mut close_returned = false;
-
-        self.points
-            .windows(2)
-            .map(|curve| Curve::new(&curve[0], &curve[1]))
-            .chain(core::iter::from_fn(move || {
-                if !close_returned && self.close && self.points.len() >= 2 {
-                    close_returned = true;
-                    Some(Curve::new(
-                        self.points.last().unwrap(),
-                        self.points.first().unwrap(),
-                    ))
-                } else {
-                    None
-                }
-            }))
-    }
-
     fn nearest_endpoints_iter<'out, 'a: 'out, 'b: 'out>(
-        &'a self, target: &'b Point,
-    ) -> impl Iterator<Item = Nearest> + 'out {
+        &'a self, target: &'b P,
+    ) -> impl Iterator<Item = Nearest<P>> + 'out {
         self.points
             .iter()
             .enumerate()
@@ -121,12 +118,12 @@ impl Shape {
     }
 
     // TODO: support bounding box clip
-    pub fn nearest_endpoint(&self, target: &Point) -> Option<Nearest> {
+    pub fn nearest_endpoint(&self, target: &P) -> Option<Nearest<P>> {
         self.nearest_endpoints_iter(target).min()
     }
 
     // TODO: support bounding box clip
-    pub fn nearest_point_on_curves(&self, target: &Point, allow_endpoint: bool) -> Option<Nearest> {
+    pub fn nearest_point_on_curves(&self, target: &P, allow_endpoint: bool) -> Option<Nearest<P>> {
         let p = self
             .curves()
             .enumerate()
@@ -140,8 +137,8 @@ impl Shape {
     }
 }
 
-impl FromIterator<CurvePoint> for Shape {
-    fn from_iter<T: IntoIterator<Item = CurvePoint>>(iter: T) -> Self {
+impl<P> FromIterator<CurvePoint<P>> for Shape<P> {
+    fn from_iter<T: IntoIterator<Item = CurvePoint<P>>>(iter: T) -> Self {
         Self {
             points: iter.into_iter().collect(),
             close: true,

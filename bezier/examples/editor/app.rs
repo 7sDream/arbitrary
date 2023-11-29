@@ -10,10 +10,11 @@ use crate::{
     configure::{self, configure_window, PointPlotConfig},
     interact::ShapeInteract,
     plot::{plot_point, plot_shape},
+    point::Point,
 };
 
 pub struct Application {
-    shape: Shape,
+    shape: Shape<Point>,
 }
 
 impl App for Application {
@@ -57,6 +58,8 @@ impl App for Application {
 
                         let pos = ui.transform().position_from_point(&target);
 
+                        let target = Point(target);
+
                         let nearest = ShapeInteract::new(&mut self.shape)
                             .snap_to_curve_with_radius(&target, pos, ui.transform(), 12.0);
 
@@ -84,12 +87,12 @@ impl App for Application {
 impl Application {
     pub fn create(_ctx: &eframe::CreationContext<'_>) -> Box<dyn App + 'static> {
         let shape = [
-            CornerPoint::new([-40.0, 0.0].into())
-                .with_out_ctrl([-20.0, -20.0].into())
+            CornerPoint::new(Point::new(-40.0, 0.0))
+                .with_out_ctrl(Point::new(-20.0, -20.0))
                 .into(),
-            SmoothPoint::horizontal([0.0, -20.0].into(), 10.0, 10.0).into(),
-            CornerPoint::new([40.0, 0.0].into())
-                .with_in_ctrl([20.0, -20.0].into())
+            SmoothPoint::horizontal(Point::new(0.0, -20.0), 10.0, 10.0).into(),
+            CornerPoint::new(Point::new(40.0, 0.0))
+                .with_in_ctrl(Point::new(20.0, -20.0))
                 .into(),
         ]
         .into_iter()

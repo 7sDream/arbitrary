@@ -1,11 +1,14 @@
-use bezier::{Bezier, CornerPoint, Curve, CurvePoint, Point, Segment, Shape, SmoothPoint};
-use egui_plot::{Line, PlotPoint, PlotPoints, PlotUi, Points};
+use bezier::{Bezier, CornerPoint, Curve, CurvePoint, Point2D, Segment, Shape, SmoothPoint};
+use egui_plot::{Line, PlotPoints, PlotUi, Points};
 
-use crate::configure::{self, CurvePlotConfig, PointPlotConfig};
+use crate::{
+    configure::{self, CurvePlotConfig, PointPlotConfig},
+    point::Point,
+};
 
 pub fn plot_point(p: &Point, ui: &mut PlotUi, opt: &PointPlotConfig) {
     ui.points(
-        Points::new(PlotPoints::Owned(vec![PlotPoint::new(p.0, p.1)]))
+        Points::new(PlotPoints::Owned(vec![p.0]))
             .shape(opt.mark)
             .filled(true)
             .radius(opt.size as f32 / 2.0)
@@ -13,7 +16,7 @@ pub fn plot_point(p: &Point, ui: &mut PlotUi, opt: &PointPlotConfig) {
     )
 }
 
-pub fn plot_corner_point(p: &CornerPoint, ui: &mut PlotUi) {
+pub fn plot_corner_point(p: &CornerPoint<Point>, ui: &mut PlotUi) {
     let conf = &configure::read();
     let opt = &conf.plot.cornel;
 
@@ -31,7 +34,7 @@ pub fn plot_corner_point(p: &CornerPoint, ui: &mut PlotUi) {
     }
 }
 
-pub fn plot_smooth_point(p: &SmoothPoint, ui: &mut PlotUi) {
+pub fn plot_smooth_point(p: &SmoothPoint<Point>, ui: &mut PlotUi) {
     let conf = &configure::read();
     let opt = &conf.plot.smooth;
 
@@ -49,16 +52,17 @@ pub fn plot_smooth_point(p: &SmoothPoint, ui: &mut PlotUi) {
     }
 }
 
-fn plot_curve_point(p: &CurvePoint, ui: &mut PlotUi) {
+fn plot_curve_point(p: &CurvePoint<Point>, ui: &mut PlotUi) {
     match p {
         CurvePoint::Corner(c) => plot_corner_point(c, ui),
         CurvePoint::Smooth(s) => plot_smooth_point(s, ui),
     }
 }
 
-pub fn plot_segment(segment: &Segment, ui: &mut PlotUi, opt: &CurvePlotConfig) {
+pub fn plot_segment(segment: &Segment<Point>, ui: &mut PlotUi, opt: &CurvePlotConfig) {
+    let f = segment.parametric_function();
     let line = Line::new(PlotPoints::from_parametric_callback(
-        segment.parametric_function(),
+        move |t| f(t).tuple(),
         0.0..=1.0,
         opt.samples,
     ))
@@ -68,9 +72,11 @@ pub fn plot_segment(segment: &Segment, ui: &mut PlotUi, opt: &CurvePlotConfig) {
     ui.line(line)
 }
 
-pub fn plot_bezier(bezier: &Bezier, ui: &mut PlotUi, opt: &CurvePlotConfig) {
+pub fn plot_bezier(bezier: &Bezier<Point>, ui: &mut PlotUi, opt: &CurvePlotConfig) {
+    let f = bezier.parametric_function();
+
     let line = Line::new(PlotPoints::from_parametric_callback(
-        bezier.parametric_function(),
+        move |t| f(t).tuple(),
         0.0..=1.0,
         opt.samples,
     ))
@@ -80,7 +86,7 @@ pub fn plot_bezier(bezier: &Bezier, ui: &mut PlotUi, opt: &CurvePlotConfig) {
     ui.line(line);
 }
 
-fn plot_curve(c: &Curve, ui: &mut PlotUi) {
+fn plot_curve(c: &Curve<Point>, ui: &mut PlotUi) {
     let opt = &configure::read().plot;
 
     match c {
@@ -89,7 +95,7 @@ fn plot_curve(c: &Curve, ui: &mut PlotUi) {
     }
 }
 
-pub fn plot_shape(shape: &Shape, ui: &mut PlotUi) {
+pub fn plot_shape(shape: &Shape<Point>, ui: &mut PlotUi) {
     if shape.points().is_empty() {
         return;
     }

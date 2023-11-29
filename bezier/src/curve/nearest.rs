@@ -1,29 +1,29 @@
 use core::cmp::Ordering;
 
-use super::{point::PointExt, Bezier, Point, Segment};
+use super::{Bezier, Point2D, Segment};
 
-pub struct Nearest {
+pub struct Nearest<P: Point2D> {
     pub index: usize,
     pub t: f64,
-    pub point: Point,
+    pub point: P,
     pub distance: f64,
 }
 
-impl PartialEq for Nearest {
+impl<P: Point2D> PartialEq for Nearest<P> {
     fn eq(&self, other: &Self) -> bool {
         self.cmp(other).is_eq()
     }
 }
 
-impl Eq for Nearest {}
+impl<P: Point2D> Eq for Nearest<P> {}
 
-impl PartialOrd for Nearest {
+impl<P: Point2D> PartialOrd for Nearest<P> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for Nearest {
+impl<P: Point2D> Ord for Nearest<P> {
     fn cmp(&self, other: &Self) -> Ordering {
         match self.distance.total_cmp(&other.distance) {
             Ordering::Equal => {}
@@ -37,26 +37,22 @@ impl Ord for Nearest {
             Ordering::Equal => {}
             ord => return ord,
         }
-        match self.point.0.total_cmp(&other.point.0) {
-            Ordering::Equal => {}
-            ord => return ord,
-        }
-        self.point.1.total_cmp(&other.point.1)
+        self.point.total_cmp(&other.point)
     }
 }
 
-impl Nearest {
-    pub fn new_from_point(point: &Point, target: &Point) -> Self {
+impl<P: Point2D> Nearest<P> {
+    pub fn new_from_point(point: &P, target: &P) -> Self {
         let distance = point.minus(target).length_from_origin();
         Self {
             index: 0,
             t: 0.0,
-            point: *point,
+            point: point.clone(),
             distance,
         }
     }
 
-    pub fn new_from_segment(segment: &Segment, t: f64, target: &Point) -> Self {
+    pub fn new_from_segment(segment: &Segment<P>, t: f64, target: &P) -> Self {
         let point = segment.at(t);
         let distance = point.minus(target).length_from_origin();
         Self {
@@ -67,7 +63,7 @@ impl Nearest {
         }
     }
 
-    pub fn new_from_bezier(line: &Bezier, t: f64, target: &Point) -> Self {
+    pub fn new_from_bezier(line: &Bezier<P>, t: f64, target: &P) -> Self {
         let point = line.at(t);
         let distance = point.minus(target).length_from_origin();
         Self {

@@ -1,24 +1,19 @@
 mod bezier;
 mod segment;
-mod point;
 mod nearest;
 
-pub use self::{
-    bezier::Bezier,
-    nearest::Nearest,
-    point::{CornerPoint, CurvePoint, Point, PointExt, SmoothPoint},
-    segment::Segment,
-};
+pub use self::{bezier::Bezier, nearest::Nearest, segment::Segment};
+use crate::{CurvePoint, Point2D};
 
-pub enum Curve {
-    Segment(Segment),
-    Bezier(Bezier),
+pub enum Curve<P> {
+    Segment(Segment<P>),
+    Bezier(Bezier<P>),
 }
 
-impl Curve {
-    pub fn new(start: &CurvePoint, end: &CurvePoint) -> Self {
-        let sp = *start.point();
-        let ep = *end.point();
+impl<P: Point2D> Curve<P> {
+    pub fn new(start: &CurvePoint<P>, end: &CurvePoint<P>) -> Self {
+        let sp = start.point().clone();
+        let ep = end.point().clone();
 
         match (start.out_ctrl(), end.in_ctrl()) {
             (Some(ctrl1), Some(ctrl2)) => {
@@ -31,14 +26,14 @@ impl Curve {
         }
     }
 
-    pub fn at(&self, t: f64) -> Point {
+    pub fn at(&self, t: f64) -> P {
         match self {
             Self::Bezier(b) => b.at(t),
             Self::Segment(l) => l.at(t),
         }
     }
 
-    pub fn nearest_to(&self, target: &Point, allow_endpoint: bool) -> Option<Nearest> {
+    pub fn nearest_to(&self, target: &P, allow_endpoint: bool) -> Option<Nearest<P>> {
         match self {
             Self::Bezier(b) => b.nearest_to(target, allow_endpoint),
             Self::Segment(l) => l.nearest_to(target, allow_endpoint),

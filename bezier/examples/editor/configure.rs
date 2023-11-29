@@ -304,8 +304,8 @@ pub fn controls_configure(config: &mut Configure, id: Id, ui: &mut Ui) {
 pub fn configure_window(ctx: &Context) {
     let configure: &mut Configure = &mut write();
 
-    if !configure.windows.configure && ctx.input(|i| i.key_pressed(Key::S)) {
-        configure.windows.configure = true;
+    if ctx.input(|i| i.key_pressed(Key::S)) {
+        configure.windows.configure = !configure.windows.configure;
     }
 
     if configure.windows.configure {

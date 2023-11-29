@@ -4,6 +4,7 @@ mod app;
 mod configure;
 mod interact;
 mod plot;
+mod point;
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
