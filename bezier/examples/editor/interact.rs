@@ -251,7 +251,7 @@ impl<'a> CornerPointInteract<'a> {
 
         let action = self.point_interact(ui, id, transform, opt);
 
-        if conf.view.show_ctrl {
+        if conf.view.ctrl {
             self.ctrl_interact(ui, id, transform, opt);
         }
 
@@ -355,7 +355,7 @@ impl<'a> SmoothPointInteract<'a> {
 
         let action = self.point_interact(ui, id, transform, opt);
 
-        if conf.view.show_ctrl {
+        if conf.view.ctrl {
             self.ctrl_interact(ui, id, transform, opt);
         }
 

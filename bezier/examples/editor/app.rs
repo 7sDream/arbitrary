@@ -1,44 +1,56 @@
 use bezier::{CornerPoint, Shape, SmoothPoint};
 use eframe::{
-    egui::{CentralPanel, Context, Id, Key, Window},
+    egui::{menu, CentralPanel, Context, Id, Key, TopBottomPanel},
     epaint::Color32,
     App, Frame,
 };
 use egui_plot::{HPlacement, Plot};
 
 use crate::{
-    configure::{self, configure_window, PointPlotConfig},
+    configure::{ConfigureWindow, PointPlotConfig},
     interact::ShapeInteract,
     plot::{plot_point, plot_shape},
     point::Point,
 };
 
 pub struct Application {
+    id: Id,
     shape: Shape<Point>,
 }
 
 impl App for Application {
     fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
-        let id = Id::new("app");
+        let configure_window_id = self.id.with("configure-window");
+        TopBottomPanel::top(self.id.with("top-panel")).show(ctx, |ui| {
+            menu::bar(ui, |ui| {
+                ui.menu_button("File", |ui| {
+                    if ui.button("Configure...").clicked() {
+                        ConfigureWindow::open(ui, configure_window_id);
+                        ui.close_menu();
+                    }
+                });
+            });
+        });
 
         CentralPanel::default().show(ctx, |ui| {
-            configure_window(ctx);
+            ConfigureWindow::new(ui, configure_window_id).show(ui);
 
-            if configure::read().windows.shape_data {
-                Window::new("Shape Data")
-                    .id(Id::new("shape_data_window"))
-                    .auto_sized()
-                    .default_open(false)
-                    .show(ctx, |ui| {
-                        ShapeInteract::new(&mut self.shape).controls(ui, id.with("shape_data"));
-                    });
-            }
+            // if configure::read().windows.shape_data {
+            //     Window::new("Shape Data")
+            //         .id(Id::new("shape_data_window"))
+            //         .auto_sized()
+            //         .default_open(false)
+            //         .show(ctx, |ui| {
+            //             ShapeInteract::new(&mut self.shape)
+            //                 .controls(ui, self.id.with("shape_data"));
+            //         });
+            // }
 
             if ctx.input(|i| i.key_released(Key::C)) {
                 self.shape.toggle_close();
             }
 
-            let response = Plot::new(id.with("shape_canvas"))
+            let response = Plot::new(self.id.with("shape_canvas"))
                 .data_aspect(1.0)
                 .include_x(-50.0)
                 .include_x(50.0)
@@ -79,7 +91,11 @@ impl App for Application {
                     None
                 });
 
-            ShapeInteract::new(&mut self.shape).interact(ui, id, response);
+            ShapeInteract::new(&mut self.shape).interact(
+                ui,
+                self.id.with("shape_interact"),
+                response,
+            );
         });
     }
 }
@@ -97,6 +113,9 @@ impl Application {
         ]
         .into_iter()
         .collect();
-        Box::new(Self { shape })
+        Box::new(Self {
+            id: Id::new("app"),
+            shape,
+        })
     }
 }

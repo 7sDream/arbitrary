@@ -22,7 +22,7 @@ pub fn plot_corner_point(p: &CornerPoint<Point>, ui: &mut PlotUi) {
 
     plot_point(p.point(), ui, &opt.point);
 
-    if conf.view.show_ctrl {
+    if conf.view.ctrl {
         if let Some(c) = p.in_ctrl() {
             plot_point(c, ui, &opt.in_ctrl);
             plot_segment(&Segment::new(*p.point(), *c), ui, &opt.in_handle);
@@ -40,7 +40,7 @@ pub fn plot_smooth_point(p: &SmoothPoint<Point>, ui: &mut PlotUi) {
 
     plot_point(p.point(), ui, &opt.point);
 
-    if conf.view.show_ctrl {
+    if conf.view.ctrl {
         let in_ctrl = p.in_ctrl();
         let out_ctrl = p.out_ctrl();
 

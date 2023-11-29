@@ -1,7 +1,7 @@
 use std::sync::OnceLock;
 
 use eframe::{
-    egui::{Button, CollapsingHeader, ComboBox, Context, Grid, Id, Key, Slider, Ui, Window},
+    egui::{ComboBox, Grid, Id, RichText, Slider, Ui, Window},
     epaint::{
         mutex::{RwLock, RwLockReadGuard, RwLockWriteGuard},
         Color32,
@@ -134,18 +134,27 @@ impl Default for SubWindowConfig {
 }
 
 pub struct ViewConfig {
-    pub show_ctrl: bool,
+    pub grid: bool,
+    pub point: bool,
+    pub ctrl: bool,
+    pub curve: bool,
+    pub show_nearest: bool,
 }
 
 impl Default for ViewConfig {
     fn default() -> Self {
-        Self { show_ctrl: true }
+        Self {
+            grid: true,
+            point: true,
+            ctrl: true,
+            curve: true,
+            show_nearest: true,
+        }
     }
 }
 
 #[derive(Default)]
 pub struct Configure {
-    pub windows: SubWindowConfig,
     pub view: ViewConfig,
     pub plot: PlotConfig,
 }
@@ -174,147 +183,283 @@ impl MarkerShapeName for MarkerShape {
             MarkerShape::Plus => "+ | plus",
             MarkerShape::Up => "^ | up",
             MarkerShape::Down => "v | down",
-            MarkerShape::Left => "<| | left",
-            MarkerShape::Right => "|> | right",
+            MarkerShape::Left => "< | left",
+            MarkerShape::Right => "> | right",
             MarkerShape::Asterisk => "* | asterisk",
         }
     }
 }
 
-fn controls_windows_config(option: &mut SubWindowConfig, _id: Id, ui: &mut Ui) {
-    ui.horizontal(|ui| {
-        let setting = ui
-            .add(Button::new("Configure").selected(option.configure))
-            .on_hover_text_at_pointer("Press S to reopen this configure window.");
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum ConfigureWindowTab {
+    View,
+    Plot,
+}
 
-        if setting.clicked() {
-            option.configure = !option.configure;
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum PlotViewTab {
+    Corner,
+    Smooth,
+    Curve,
+}
+
+#[derive(Clone, PartialEq)]
+struct ConfigureWindowState {
+    opened: bool,
+    tab: ConfigureWindowTab,
+    plot_tab: PlotViewTab,
+}
+
+impl Default for ConfigureWindowState {
+    fn default() -> Self {
+        Self {
+            opened: true,
+            tab: ConfigureWindowTab::View,
+            plot_tab: PlotViewTab::Corner,
         }
+    }
+}
 
-        if ui
-            .add(Button::new("Shape data").selected(option.shape_data))
-            .clicked()
-        {
-            option.shape_data = !option.shape_data;
+impl ConfigureWindowState {
+    pub fn get(ui: &mut Ui, id: Id) -> Self {
+        ui.memory_mut(|mem| mem.data.get_temp_mut_or_default::<Self>(id).clone())
+    }
+}
+
+pub struct ConfigureWindow {
+    id: Id,
+    state: ConfigureWindowState,
+}
+
+impl ConfigureWindow {
+    pub fn new(ui: &mut Ui, id: Id) -> Self {
+        Self {
+            id,
+            state: ConfigureWindowState::get(ui, id),
         }
-    });
-}
-
-fn controls_view_config(option: &mut ViewConfig, _id: Id, ui: &mut Ui) {
-    ui.checkbox(&mut option.show_ctrl, "Show ctrl point and handle");
-}
-
-fn controls_mark_shape(marker: &mut MarkerShape, id: Id, ui: &mut Ui) {
-    ComboBox::from_id_source(id.with("child"))
-        .selected_text(marker.name())
-        .show_ui(ui, |ui| {
-            ui.selectable_value(marker, MarkerShape::Circle, MarkerShape::Circle.name());
-            ui.selectable_value(marker, MarkerShape::Diamond, MarkerShape::Diamond.name());
-            ui.selectable_value(marker, MarkerShape::Square, MarkerShape::Square.name());
-            ui.selectable_value(marker, MarkerShape::Cross, MarkerShape::Cross.name());
-            ui.selectable_value(marker, MarkerShape::Plus, MarkerShape::Plus.name());
-            ui.selectable_value(marker, MarkerShape::Up, MarkerShape::Up.name());
-            ui.selectable_value(marker, MarkerShape::Down, MarkerShape::Down.name());
-            ui.selectable_value(marker, MarkerShape::Left, MarkerShape::Left.name());
-            ui.selectable_value(marker, MarkerShape::Right, MarkerShape::Right.name());
-            ui.selectable_value(marker, MarkerShape::Asterisk, MarkerShape::Asterisk.name());
-        });
-}
-
-fn controls_point_plot_option(option: &mut PointPlotConfig, text: &str, id: Id, ui: &mut Ui) {
-    CollapsingHeader::new(text)
-        .id_source(id.with("header"))
-        .show(ui, |ui| {
-            Grid::new(id.with("grid")).show(ui, |ui| {
-                ui.label("Size: ");
-                ui.add(Slider::new(&mut option.size, 0.0..=32.0));
-                ui.end_row();
-
-                ui.label("Marker: ");
-                controls_mark_shape(&mut option.mark, id.with("marker"), ui);
-                ui.end_row();
-
-                ui.label("Color: ");
-                ui.color_edit_button_srgba(&mut option.color);
-                ui.end_row();
-            })
-        });
-}
-
-fn controls_curve_plot_config(option: &mut CurvePlotConfig, text: &str, id: Id, ui: &mut Ui) {
-    CollapsingHeader::new(text)
-        .id_source(id.with("header"))
-        .show(ui, |ui| {
-            Grid::new(id.with("grid")).show(ui, |ui| {
-                ui.label("Width: ");
-                ui.add(Slider::new(&mut option.width, 0.0..=32.0));
-                ui.end_row();
-
-                ui.label("Color: ");
-                ui.color_edit_button_srgba(&mut option.color);
-                ui.end_row();
-
-                ui.label("Samples: ");
-                ui.add(Slider::new(&mut option.samples, 2..=256));
-                ui.end_row();
-            })
-        });
-}
-
-fn controls_curve_point_plot_config(
-    option: &mut CurvePointPlotConfig, text: &str, id: Id, ui: &mut Ui,
-) {
-    CollapsingHeader::new(text).id_source(id).show(ui, |ui| {
-        controls_point_plot_option(&mut option.point, "Point", id.with("point"), ui);
-        controls_point_plot_option(&mut option.in_ctrl, "In ctrl point", id.with("in_ctrl"), ui);
-        controls_curve_plot_config(
-            &mut option.in_handle,
-            "In ctrl handle",
-            id.with("in_handle"),
-            ui,
-        );
-        controls_point_plot_option(
-            &mut option.out_ctrl,
-            "Out ctrl point",
-            id.with("out_ctrl"),
-            ui,
-        );
-        controls_curve_plot_config(
-            &mut option.out_handle,
-            "Out ctrl handle",
-            id.with("out_handle"),
-            ui,
-        );
-    });
-}
-
-fn controls_plot_config(option: &mut PlotConfig, id: Id, ui: &mut Ui) {
-    controls_curve_point_plot_config(&mut option.cornel, "Cornel point", id.with("cornel"), ui);
-    controls_curve_point_plot_config(&mut option.smooth, "Smooth point", id.with("smooth"), ui);
-    controls_curve_plot_config(&mut option.segment, "Segment", id.with("segment"), ui);
-    controls_curve_plot_config(&mut option.bezier, "Bezier", id.with("bezier"), ui);
-}
-
-pub fn controls_configure(config: &mut Configure, id: Id, ui: &mut Ui) {
-    controls_windows_config(&mut config.windows, id.with("windows"), ui);
-    controls_view_config(&mut config.view, id.with("view"), ui);
-    controls_plot_config(&mut config.plot, id.with("plot"), ui);
-}
-
-pub fn configure_window(ctx: &Context) {
-    let configure: &mut Configure = &mut write();
-
-    if ctx.input(|i| i.key_pressed(Key::S)) {
-        configure.windows.configure = !configure.windows.configure;
     }
 
-    if configure.windows.configure {
-        Window::new("Configure")
-            .id(Id::new("configure_window"))
-            .auto_sized()
-            .default_open(true)
-            .show(ctx, |ui| {
-                controls_configure(configure, Id::new("configure"), ui)
+    fn update<F, T>(mut self, ui: &mut Ui, f: F) -> T
+    where
+        F: FnOnce(&mut Ui, &mut Self) -> T,
+    {
+        let origin = self.state.clone();
+        let result = f(ui, &mut self);
+        if self.state != origin {
+            self.save(ui);
+        }
+        result
+    }
+
+    pub fn open(ui: &mut Ui, id: Id) {
+        Self::new(ui, id).update(ui, |_, s| s.state.opened = true);
+    }
+
+    pub fn close(ui: &mut Ui, id: Id) {
+        Self::new(ui, id).update(ui, |_, s| s.state.opened = false);
+    }
+
+    pub fn open_mut(&mut self) -> &mut bool {
+        &mut self.state.opened
+    }
+
+    pub fn save(self, ui: &mut Ui) {
+        ui.memory_mut(|mem| mem.data.insert_temp(self.id, self.state))
+    }
+
+    fn tab_view(&mut self, ui: &mut Ui, conf: &mut ViewConfig) {
+        ui.vertical(|ui| {
+            ui.checkbox(&mut conf.grid, "Grid");
+            ui.checkbox(&mut conf.point, "Point");
+            ui.checkbox(&mut conf.ctrl, "Control point");
+            ui.checkbox(&mut conf.curve, "Curve");
+
+            ui.checkbox(&mut conf.show_nearest, "nearest point")
+                .on_hover_ui(|ui| {
+                    ui.label("Show nearest point when mouse hover. ");
+                    ui.label(RichText::new("Notice: effect performance").strong());
+                });
+        });
+    }
+
+    fn table_title(ui: &mut Ui, text: &str) {
+        ui.vertical_centered(|ui| {
+            ui.label(text);
+        });
+    }
+
+    fn point_marker_combo_box(ui: &mut Ui, id: Id, marker: &mut MarkerShape) {
+        ComboBox::from_id_source(id)
+            .selected_text(marker.name())
+            .show_ui(ui, |ui| {
+                ui.selectable_value(marker, MarkerShape::Circle, MarkerShape::Circle.name());
+                ui.selectable_value(marker, MarkerShape::Diamond, MarkerShape::Diamond.name());
+                ui.selectable_value(marker, MarkerShape::Square, MarkerShape::Square.name());
+                ui.selectable_value(marker, MarkerShape::Cross, MarkerShape::Cross.name());
+                ui.selectable_value(marker, MarkerShape::Plus, MarkerShape::Plus.name());
+                ui.selectable_value(marker, MarkerShape::Up, MarkerShape::Up.name());
+                ui.selectable_value(marker, MarkerShape::Down, MarkerShape::Down.name());
+                ui.selectable_value(marker, MarkerShape::Left, MarkerShape::Left.name());
+                ui.selectable_value(marker, MarkerShape::Right, MarkerShape::Right.name());
+                ui.selectable_value(marker, MarkerShape::Asterisk, MarkerShape::Asterisk.name());
             });
+    }
+
+    fn point_row(ui: &mut Ui, id: Id, text: &str, conf: &mut PointPlotConfig) {
+        ui.label(text);
+        ui.add(Slider::new(&mut conf.size, 0.0..=32.0));
+        ui.vertical_centered(|ui| {
+            ui.color_edit_button_srgba(&mut conf.color);
+        });
+        Self::point_marker_combo_box(ui, id.with("marker"), &mut conf.mark);
+        ui.end_row();
+    }
+
+    fn curve_row(ui: &mut Ui, _id: Id, text: &str, conf: &mut CurvePlotConfig) {
+        ui.label(text);
+        ui.add(Slider::new(&mut conf.width, 0.0..=32.0));
+        ui.vertical_centered(|ui| {
+            ui.color_edit_button_srgba(&mut conf.color);
+        });
+        ui.add(Slider::new(&mut conf.samples, 2..=256));
+        ui.end_row();
+    }
+
+    fn point_table<F>(ui: &mut Ui, id: Id, content: F)
+    where
+        F: FnOnce(&mut Ui),
+    {
+        Grid::new(id)
+            .num_columns(4)
+            .min_col_width(64.0)
+            .show(ui, |ui| {
+                ui.label("");
+                ui.vertical_centered(|ui| {
+                    ui.label("Size");
+                });
+                ui.vertical_centered(|ui| {
+                    ui.label("Color");
+                });
+                ui.vertical_centered(|ui| {
+                    ui.label("Shape");
+                });
+                ui.end_row();
+                content(ui);
+            });
+    }
+
+    fn curve_table<F>(ui: &mut Ui, id: Id, content: F)
+    where
+        F: FnOnce(&mut Ui),
+    {
+        Grid::new(id)
+            .num_columns(4)
+            .min_col_width(64.0)
+            .show(ui, |ui| {
+                ui.label("");
+                ui.vertical_centered(|ui| {
+                    ui.label("Width");
+                });
+                ui.vertical_centered(|ui| {
+                    ui.label("Color");
+                });
+                ui.vertical_centered(|ui| {
+                    ui.label("Samples");
+                });
+                ui.end_row();
+                content(ui);
+            });
+    }
+
+    fn tab_plot_point(&mut self, ui: &mut Ui, id: Id, conf: &mut CurvePointPlotConfig) {
+        ui.group(|ui| {
+            Self::table_title(ui, "Control point");
+            ui.add_space(8.0);
+            Self::point_table(ui, id.with("point-grid"), |ui| {
+                Self::point_row(ui, id.with("point"), "Main", &mut conf.point);
+                Self::point_row(ui, id.with("in-point"), "In", &mut conf.in_ctrl);
+                Self::point_row(ui, id.with("out-point"), "Out", &mut conf.out_ctrl);
+            });
+        });
+
+        ui.add_space(8.0);
+
+        ui.group(|ui| {
+            Self::table_title(ui, "Handle");
+            ui.add_space(8.0);
+            Self::curve_table(ui, id.with("handle-grid"), |ui| {
+                Self::curve_row(ui, id.with("in-handle"), "In", &mut conf.in_handle);
+                Self::curve_row(ui, id.with("out-handle"), "Out", &mut conf.out_handle);
+            });
+        });
+    }
+
+    fn tab_plot_curve(&mut self, ui: &mut Ui, id: Id, conf: &mut PlotConfig) {
+        Self::curve_table(ui, id.with("curve-grid"), |ui| {
+            Self::curve_row(ui, id.with("segment-curve"), "Segment", &mut conf.segment);
+            Self::curve_row(ui, id.with("bezier-curve"), "Bezier", &mut conf.bezier);
+        });
+    }
+
+    fn tab_plot(&mut self, ui: &mut Ui, conf: &mut PlotConfig) {
+        ui.horizontal(|ui| {
+            ui.selectable_value(&mut self.state.plot_tab, PlotViewTab::Corner, "Corner");
+            ui.separator();
+            ui.selectable_value(&mut self.state.plot_tab, PlotViewTab::Smooth, "Smooth");
+            ui.separator();
+            ui.selectable_value(&mut self.state.plot_tab, PlotViewTab::Curve, "Curve");
+        });
+        ui.separator();
+
+        match self.state.plot_tab {
+            PlotViewTab::Corner => {
+                self.tab_plot_point(ui, self.id.with("corner"), &mut conf.cornel)
+            }
+            PlotViewTab::Smooth => {
+                self.tab_plot_point(ui, self.id.with("smooth"), &mut conf.smooth)
+            }
+            PlotViewTab::Curve => self.tab_plot_curve(ui, self.id.with("curve"), conf),
+        };
+    }
+
+    fn controls(&mut self, ui: &mut Ui) {
+        let conf: &mut Configure = &mut write();
+
+        ui.horizontal(|ui| {
+            ui.selectable_value(&mut self.state.tab, ConfigureWindowTab::View, "View");
+            ui.separator();
+            ui.selectable_value(&mut self.state.tab, ConfigureWindowTab::Plot, "Plot");
+        });
+        ui.separator();
+        match self.state.tab {
+            ConfigureWindowTab::View => self.tab_view(ui, &mut conf.view),
+            ConfigureWindowTab::Plot => self.tab_plot(ui, &mut conf.plot),
+        }
+    }
+
+    pub fn show(self, ui: &mut Ui) {
+        if !self.state.opened {
+            return;
+        }
+
+        let window_id = self.id.with("window");
+
+        self.update(ui, |ui, myself| {
+            let mut opened = true;
+
+            Window::new("Configure")
+                .id(window_id)
+                .open(&mut opened)
+                .default_open(true)
+                .default_width(160.0)
+                .scroll2([false, true])
+                .show(ui.ctx(), |ui| {
+                    myself.controls(ui);
+                });
+
+            if !opened {
+                myself.state.opened = false;
+            }
+        });
     }
 }
