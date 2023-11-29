@@ -28,7 +28,7 @@ pub trait Point2D: Clone {
     #[inline(always)]
     fn length_from_origin(&self) -> f64 {
         let [x, y] = self.array();
-        (x * x + y * y).sqrt()
+        libm::sqrt(x * x + y * y)
     }
 
     #[inline(always)]
@@ -47,7 +47,7 @@ pub trait Point2D: Clone {
             return (0.0, 0.0);
         }
 
-        let mut theta = (x / r).acos().to_degrees();
+        let mut theta = libm::acos(x / r).to_degrees();
         if y.is_sign_negative() {
             theta = 360.0 - theta;
         }
@@ -98,8 +98,8 @@ pub trait Point2D: Clone {
     #[inline(always)]
     fn move_follow(&self, dir: f64, length: f64) -> Self {
         let delta = Self::from_xy(
-            dir.to_radians().cos() * length,
-            dir.to_radians().sin() * length,
+            libm::cos(dir.to_radians()) * length,
+            libm::sin(dir.to_radians()) * length,
         );
         self.plus(&delta)
     }

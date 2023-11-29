@@ -25,7 +25,12 @@ pub struct SmoothPoint<P> {
 /// New
 impl<P> SmoothPoint<P> {
     pub fn new(point: P, theta: f64, in_length: f64, out_length: f64) -> Self {
-        Self::new_unchecked(point, theta % (360.0), in_length.abs(), out_length.abs())
+        Self::new_unchecked(
+            point,
+            theta % (360.0),
+            libm::fabs(in_length),
+            libm::fabs(out_length),
+        )
     }
 
     fn new_unchecked(point: P, rad: f64, in_length: f64, out_length: f64) -> Self {
@@ -38,11 +43,11 @@ impl<P> SmoothPoint<P> {
     }
 
     pub fn horizontal(point: P, in_length: f64, out_length: f64) -> Self {
-        Self::new_unchecked(point, 0.0, in_length.abs(), out_length.abs())
+        Self::new_unchecked(point, 0.0, libm::fabs(in_length), libm::fabs(out_length))
     }
 
     pub fn vertical(point: P, in_length: f64, out_length: f64) -> Self {
-        Self::new_unchecked(point, 90.0, in_length.abs(), out_length.abs())
+        Self::new_unchecked(point, 90.0, libm::fabs(in_length), libm::fabs(out_length))
     }
 }
 
@@ -73,11 +78,11 @@ impl<P> SmoothPoint<P> {
     }
 
     pub fn update_in_length(&mut self, val: f64) {
-        self.in_length = val.abs();
+        self.in_length = libm::fabs(val);
     }
 
     pub fn update_out_length(&mut self, val: f64) {
-        self.out_length = val.abs();
+        self.out_length = libm::fabs(val);
     }
 }
 

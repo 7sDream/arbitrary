@@ -17,9 +17,9 @@ path = "examples/editor/main.rs"
 dyn-stack = { version = "0.10", default-features = false }
 faer-core = { version = "0.15", default-features = false }
 faer-evd = { version = "0.15", default-features = false }
+libm = "0.2"
 
 [dev-dependencies]
-arc-swap = "1.6.0"
 eframe = { version = "0.24", default-features = false, features = [
     "glow",
     "wayland",

@@ -21,20 +21,23 @@ fn main() -> eframe::Result<()> {
 }
 
 #[cfg(target_arch = "wasm32")]
+async fn start(canvas_id: &str) {
+    let web_options = eframe::WebOptions::default();
+
+    eframe::WebRunner::new()
+        .start(
+            canvas_id, // hardcode it
+            web_options,
+            Box::new(app::Application::create),
+        )
+        .await
+        .expect("failed to start app");
+}
+
+#[cfg(target_arch = "wasm32")]
 fn main() {
     // Redirect `log` message to `console.log` and friends:
     eframe::WebLogger::init(log::LevelFilter::Debug).ok();
 
-    let web_options = eframe::WebOptions::default();
-
-    wasm_bindgen_futures::spawn_local(async {
-        eframe::WebRunner::new()
-            .start(
-                "canvas", // hardcode it
-                web_options,
-                Box::new(app::Application::create),
-            )
-            .await
-            .expect("failed to start app");
-    });
+    wasm_bindgen_futures::spawn_local(start("canvas"));
 }
