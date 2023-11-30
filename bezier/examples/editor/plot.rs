@@ -20,7 +20,9 @@ pub fn plot_corner_point(p: &CornerPoint<Point>, ui: &mut PlotUi) {
     let conf = &configure::read();
     let opt = &conf.plot.cornel;
 
-    plot_point(p.point(), ui, &opt.point);
+    if conf.view.point {
+        plot_point(p.point(), ui, &opt.point);
+    }
 
     if conf.view.ctrl {
         if let Some(c) = p.in_ctrl() {
@@ -38,7 +40,9 @@ pub fn plot_smooth_point(p: &SmoothPoint<Point>, ui: &mut PlotUi) {
     let conf = &configure::read();
     let opt = &conf.plot.smooth;
 
-    plot_point(p.point(), ui, &opt.point);
+    if conf.view.point {
+        plot_point(p.point(), ui, &opt.point);
+    }
 
     if conf.view.ctrl {
         let in_ctrl = p.in_ctrl();
@@ -104,7 +108,9 @@ pub fn plot_shape(shape: &Shape<Point>, ui: &mut PlotUi) {
         plot_curve_point(point, ui)
     }
 
-    for curve in shape.curves() {
-        plot_curve(&curve, ui);
+    if configure::read().view.curve {
+        for curve in shape.curves() {
+            plot_curve(&curve, ui);
+        }
     }
 }

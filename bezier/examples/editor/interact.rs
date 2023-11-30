@@ -249,7 +249,11 @@ impl<'a> CornerPointInteract<'a> {
         let conf = &configure::read();
         let opt = &conf.plot.cornel;
 
-        let action = self.point_interact(ui, id, transform, opt);
+        let mut action = None;
+
+        if conf.view.point {
+            action = self.point_interact(ui, id, transform, opt);
+        }
 
         if conf.view.ctrl {
             self.ctrl_interact(ui, id, transform, opt);
@@ -353,7 +357,11 @@ impl<'a> SmoothPointInteract<'a> {
         let conf = &configure::read();
         let opt = &conf.plot.smooth;
 
-        let action = self.point_interact(ui, id, transform, opt);
+        let mut action = None;
+
+        if conf.view.point {
+            action = self.point_interact(ui, id, transform, opt);
+        }
 
         if conf.view.ctrl {
             self.ctrl_interact(ui, id, transform, opt);
@@ -480,7 +488,7 @@ impl<'a> ShapeInteract<'a> {
         }
     }
 
-    fn do_action(&mut self, index: usize, action: PointAction) {
+    fn do_point_action(&mut self, index: usize, action: PointAction) {
         match action {
             PointAction::Click => {
                 if index == 0 && self.shape.len() >= 2 {
@@ -539,34 +547,37 @@ impl<'a> ShapeInteract<'a> {
     }
 
     pub fn snap_to_curve_with_radius(
-        &self, target: &Point, pos: Pos2, transform: &PlotTransform, radius: f64,
-    ) -> Option<Nearest<Point>> {
-        let mut nearest = self.shape.nearest_point_on_curves(target, false);
+        &self, pos: Pos2, transform: &PlotTransform, radius: f64,
+    ) -> (Point, Option<Nearest<Point>>) {
+        let target = transform.value_from_position(pos).into();
+        let mut nearest = self.shape.nearest_point_on_curves(&target, false);
 
         if let Some(ref n) = nearest {
-            let p_pos = transform.position_from_point(&n.point.0);
-            if pos.distance(p_pos) > radius as f32 {
+            let npos = transform.position_from_point(&n.point.0);
+            if pos.distance(npos) > radius as f32 {
                 nearest.take();
             }
         }
 
-        nearest
+        (target, nearest)
     }
 
-    fn insert_nearest_without_calculation(
-        &mut self, target: Point, nearest: Option<Nearest<Point>>,
-    ) {
-        if let Some(n) = nearest {
-            self.shape.insert_on_curve(n.index, n.t);
-        } else if !self.shape.closed() {
-            self.shape.push(CornerPoint::new(target).into());
+    fn do_clicked<R>(&mut self, response: &PlotResponse<R>) {
+        if response.response.clicked() {
+            if let Some(pos) = response.response.interact_pointer_pos() {
+                let (target, nearest) =
+                    self.snap_to_curve_with_radius(pos, &response.transform, 12.0);
+
+                if let Some(n) = nearest {
+                    self.shape.insert_on_curve(n.index, n.t);
+                } else if !self.shape.closed() {
+                    self.shape.push(CornerPoint::new(target).into());
+                }
+            }
         }
     }
 
-    pub fn interact(
-        &mut self, ui: &mut Ui, id: Id,
-        response: PlotResponse<Option<(Point, Option<Nearest<Point>>)>>,
-    ) {
+    pub fn interact<R>(&mut self, ui: &mut Ui, id: Id, response: &PlotResponse<R>) {
         let mut act = None;
 
         for (i, point) in self.shape.points_mut().iter_mut().enumerate() {
@@ -577,11 +588,9 @@ impl<'a> ShapeInteract<'a> {
         }
 
         if let Some((index, action)) = act {
-            self.do_action(index, action);
+            self.do_point_action(index, action);
         }
 
-        if let Some((target, nearest)) = response.inner {
-            self.insert_nearest_without_calculation(target, nearest);
-        }
+        self.do_clicked(&response);
     }
 }

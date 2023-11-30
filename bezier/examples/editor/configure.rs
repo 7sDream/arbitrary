@@ -139,7 +139,6 @@ pub struct ViewConfig {
     pub point: bool,
     pub ctrl: bool,
     pub curve: bool,
-    pub show_nearest: bool,
 }
 
 impl Default for ViewConfig {
@@ -149,7 +148,6 @@ impl Default for ViewConfig {
             point: true,
             ctrl: true,
             curve: true,
-            show_nearest: true,
         }
     }
 }
@@ -214,7 +212,7 @@ struct ConfigureWindowState {
 impl Default for ConfigureWindowState {
     fn default() -> Self {
         Self {
-            opened: true,
+            opened: false,
             tab: ConfigureWindowTab::View,
             plot_tab: PlotViewTab::Corner,
         }
@@ -268,18 +266,12 @@ impl ConfigureWindow {
         ui.memory_mut(|mem| mem.data.insert_temp(self.id, self.state))
     }
 
-    fn tab_view(&mut self, ui: &mut Ui, conf: &mut ViewConfig) {
+    pub fn tab_view(ui: &mut Ui, conf: &mut ViewConfig) {
         ui.vertical(|ui| {
             ui.checkbox(&mut conf.grid, "Grid");
             ui.checkbox(&mut conf.point, "Point");
             ui.checkbox(&mut conf.ctrl, "Control point");
             ui.checkbox(&mut conf.curve, "Curve");
-
-            ui.checkbox(&mut conf.show_nearest, "Nearest point")
-                .on_hover_ui(|ui| {
-                    ui.label("Show nearest point when mouse close to curve.");
-                    ui.label(RichText::new("Notice: effect performance").strong());
-                });
         });
     }
 
@@ -463,7 +455,7 @@ impl ConfigureWindow {
         });
         ui.separator();
         match self.state.tab {
-            ConfigureWindowTab::View => self.tab_view(ui, &mut conf.view),
+            ConfigureWindowTab::View => Self::tab_view(ui, &mut conf.view),
             ConfigureWindowTab::Plot => self.tab_plot(ui, &mut conf.plot),
         }
     }
