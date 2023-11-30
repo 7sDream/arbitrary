@@ -11,7 +11,7 @@ wasm-bindgen ./target/wasm32-unknown-unknown/release/examples/editor.wasm --targ
 
 ## TODO
 
-- [ ] 配置重置
+- [ ] View 配置生效
 - [ ] 配置保存
 - [ ] 窗口菜单
 - [ ] 保持方向，只移动长度的模式

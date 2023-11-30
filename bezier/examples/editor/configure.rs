@@ -1,7 +1,8 @@
 use std::sync::OnceLock;
 
 use eframe::{
-    egui::{ComboBox, Grid, Id, RichText, Slider, Ui, Window},
+    egui::{ComboBox, Grid, Id, Layout, RichText, Slider, Ui, Window},
+    emath::Align,
     epaint::{
         mutex::{RwLock, RwLockReadGuard, RwLockWriteGuard},
         Color32,
@@ -32,7 +33,7 @@ pub struct CurvePointPlotConfig {
     pub out_handle: CurvePlotConfig,
 }
 
-const CORNEL_POINT: CurvePointPlotConfig = CurvePointPlotConfig {
+const DEFAULT_CORNEL_POINT_PLOT_CONFIG: CurvePointPlotConfig = CurvePointPlotConfig {
     point: PointPlotConfig {
         mark: MarkerShape::Square,
         size: 16.0,
@@ -60,7 +61,7 @@ const CORNEL_POINT: CurvePointPlotConfig = CurvePointPlotConfig {
     },
 };
 
-const SMOOTH_POINT: CurvePointPlotConfig = CurvePointPlotConfig {
+const DEFAULT_SMOOTH_POINT_PLOT_CONFIG: CurvePointPlotConfig = CurvePointPlotConfig {
     point: PointPlotConfig {
         mark: MarkerShape::Circle,
         size: 16.0,
@@ -88,13 +89,13 @@ const SMOOTH_POINT: CurvePointPlotConfig = CurvePointPlotConfig {
     },
 };
 
-const CURVE_BEZIER: CurvePlotConfig = CurvePlotConfig {
+const DEFAULT_CURVE_SEGMENT_PLOT_CONFIG: CurvePlotConfig = CurvePlotConfig {
     width: 2.0,
     color: Color32::BLUE,
     samples: 64,
 };
 
-const CURVE_SEGMENT: CurvePlotConfig = CurvePlotConfig {
+const DEFAULT_CURVE_BEZIER_PLOT_CONFIG: CurvePlotConfig = CurvePlotConfig {
     width: 2.0,
     color: Color32::BLUE,
     samples: 2,
@@ -111,10 +112,10 @@ pub struct PlotConfig {
 impl Default for PlotConfig {
     fn default() -> Self {
         Self {
-            cornel: CORNEL_POINT.clone(),
-            smooth: SMOOTH_POINT.clone(),
-            segment: CURVE_SEGMENT.clone(),
-            bezier: CURVE_BEZIER.clone(),
+            cornel: DEFAULT_CORNEL_POINT_PLOT_CONFIG.clone(),
+            smooth: DEFAULT_SMOOTH_POINT_PLOT_CONFIG.clone(),
+            segment: DEFAULT_CURVE_BEZIER_PLOT_CONFIG.clone(),
+            bezier: DEFAULT_CURVE_SEGMENT_PLOT_CONFIG.clone(),
         }
     }
 }
@@ -274,9 +275,9 @@ impl ConfigureWindow {
             ui.checkbox(&mut conf.ctrl, "Control point");
             ui.checkbox(&mut conf.curve, "Curve");
 
-            ui.checkbox(&mut conf.show_nearest, "nearest point")
+            ui.checkbox(&mut conf.show_nearest, "Nearest point")
                 .on_hover_ui(|ui| {
-                    ui.label("Show nearest point when mouse hover. ");
+                    ui.label("Show nearest point when mouse close to curve.");
                     ui.label(RichText::new("Notice: effect performance").strong());
                 });
         });
@@ -371,7 +372,9 @@ impl ConfigureWindow {
             });
     }
 
-    fn tab_plot_point(&mut self, ui: &mut Ui, id: Id, conf: &mut CurvePointPlotConfig) {
+    fn tab_plot_point(
+        &mut self, ui: &mut Ui, id: Id, conf: &mut CurvePointPlotConfig, def: &CurvePointPlotConfig,
+    ) {
         ui.group(|ui| {
             Self::table_title(ui, "Control point");
             ui.add_space(8.0);
@@ -392,33 +395,62 @@ impl ConfigureWindow {
                 Self::curve_row(ui, id.with("out-handle"), "Out", &mut conf.out_handle);
             });
         });
+
+        ui.add_space(8.0);
+
+        ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
+            if ui.button("Reset to default").clicked() {
+                *conf = def.clone();
+            }
+        });
     }
 
     fn tab_plot_curve(&mut self, ui: &mut Ui, id: Id, conf: &mut PlotConfig) {
-        Self::curve_table(ui, id.with("curve-grid"), |ui| {
-            Self::curve_row(ui, id.with("segment-curve"), "Segment", &mut conf.segment);
-            Self::curve_row(ui, id.with("bezier-curve"), "Bezier", &mut conf.bezier);
+        ui.group(|ui| {
+            Self::curve_table(ui, id.with("curve-grid"), |ui| {
+                Self::curve_row(ui, id.with("segment-curve"), "Segment", &mut conf.segment);
+                Self::curve_row(ui, id.with("bezier-curve"), "Bezier", &mut conf.bezier);
+            });
+        });
+
+        ui.add_space(8.0);
+
+        ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
+            if ui.button("Reset to default").clicked() {
+                conf.segment = DEFAULT_CURVE_BEZIER_PLOT_CONFIG.clone();
+                conf.bezier = DEFAULT_CURVE_SEGMENT_PLOT_CONFIG.clone();
+            }
         });
     }
 
     fn tab_plot(&mut self, ui: &mut Ui, conf: &mut PlotConfig) {
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.state.plot_tab, PlotViewTab::Corner, "Corner");
-            ui.separator();
             ui.selectable_value(&mut self.state.plot_tab, PlotViewTab::Smooth, "Smooth");
-            ui.separator();
             ui.selectable_value(&mut self.state.plot_tab, PlotViewTab::Curve, "Curve");
         });
         ui.separator();
 
         match self.state.plot_tab {
             PlotViewTab::Corner => {
-                self.tab_plot_point(ui, self.id.with("corner"), &mut conf.cornel)
+                self.tab_plot_point(
+                    ui,
+                    self.id.with("corner"),
+                    &mut conf.cornel,
+                    &DEFAULT_CORNEL_POINT_PLOT_CONFIG,
+                );
             }
             PlotViewTab::Smooth => {
-                self.tab_plot_point(ui, self.id.with("smooth"), &mut conf.smooth)
+                self.tab_plot_point(
+                    ui,
+                    self.id.with("smooth"),
+                    &mut conf.smooth,
+                    &DEFAULT_SMOOTH_POINT_PLOT_CONFIG,
+                );
             }
-            PlotViewTab::Curve => self.tab_plot_curve(ui, self.id.with("curve"), conf),
+            PlotViewTab::Curve => {
+                self.tab_plot_curve(ui, self.id.with("curve"), conf);
+            }
         };
     }
 
@@ -427,7 +459,6 @@ impl ConfigureWindow {
 
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.state.tab, ConfigureWindowTab::View, "View");
-            ui.separator();
             ui.selectable_value(&mut self.state.tab, ConfigureWindowTab::Plot, "Plot");
         });
         ui.separator();
