@@ -6,10 +6,11 @@ use eframe::{
 use egui_plot::{HPlacement, Plot};
 
 use crate::{
-    configure::{self, ConfigureWindow},
+    configure,
     interact::ShapeInteract,
     plot::plot_shape,
     point::Point,
+    window::{ConfigureWindow, FloatWindow},
 };
 
 pub struct Application {
@@ -56,7 +57,6 @@ impl Application {
 
 impl App for Application {
     fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
-        let configure_window_id = self.id.with("configure-window");
         TopBottomPanel::top(self.id.with("top-panel")).show(ctx, |ui| {
             menu::bar(ui, |ui| {
                 self.menu_bar(ui);
@@ -64,7 +64,7 @@ impl App for Application {
         });
 
         CentralPanel::default().show(ctx, |ui| {
-            ConfigureWindow::new(ui, configure_window_id).show(ui);
+            ConfigureWindow::new(ui, self.configure_window_id()).show(ui);
 
             // if configure::read().windows.shape_data {
             //     Window::new("Shape Data")
