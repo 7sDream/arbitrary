@@ -10,7 +10,7 @@ use crate::{
     interact::ShapeInteract,
     plot::plot_shape,
     point::Point,
-    window::{ConfigureWindow, FloatWindow},
+    window::{ConfigureWindow, FloatWindow, ShapeDataWindow},
 };
 
 pub struct Application {
@@ -21,6 +21,10 @@ pub struct Application {
 impl Application {
     fn configure_window_id(&self) -> Id {
         self.id.with("configure-window")
+    }
+
+    fn shape_window_id(&self) -> Id {
+        self.id.with("shape-window")
     }
 
     fn menu_bar(&self, ui: &mut Ui) {
@@ -43,6 +47,10 @@ impl Application {
         });
 
         ui.menu_button("Edit", |ui| {
+            if ui.button("Shape Data...").clicked() {
+                ShapeDataWindow::open(ui, self.shape_window_id());
+                ui.close_menu();
+            }
             if ui.button("Configure...").clicked() {
                 ConfigureWindow::open(ui, self.configure_window_id());
                 ui.close_menu();
@@ -64,18 +72,8 @@ impl App for Application {
         });
 
         CentralPanel::default().show(ctx, |ui| {
-            ConfigureWindow::new(ui, self.configure_window_id()).show(ui);
-
-            // if configure::read().windows.shape_data {
-            //     Window::new("Shape Data")
-            //         .id(Id::new("shape_data_window"))
-            //         .auto_sized()
-            //         .default_open(false)
-            //         .show(ctx, |ui| {
-            //             ShapeInteract::new(&mut self.shape)
-            //                 .controls(ui, self.id.with("shape_data"));
-            //         });
-            // }
+            ConfigureWindow::new(ui, self.configure_window_id()).show(ui, &mut None);
+            ShapeDataWindow::new(ui, self.shape_window_id()).show(ui, &mut self.shape);
 
             if ctx.input(|i| i.key_released(Key::C)) {
                 self.shape.toggle_close();

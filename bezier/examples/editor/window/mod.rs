@@ -9,6 +9,7 @@ pub trait WindowState: Default + Clone + PartialEq + Send + Sync + 'static {
 }
 
 pub trait FloatWindow {
+    type Data;
     type State: WindowState;
 
     fn new(ui: &mut Ui, id: Id) -> Self;
@@ -18,7 +19,7 @@ pub trait FloatWindow {
 
     fn title(&self) -> &'static str;
 
-    fn window_controls(&mut self, ui: &mut Ui);
+    fn window_controls(&mut self, ui: &mut Ui, data: &mut Self::Data);
 
     fn open_mut(&mut self) -> &mut bool {
         self.state_mut().open_mut()
@@ -51,7 +52,7 @@ pub trait FloatWindow {
         result
     }
 
-    fn show(mut self, ui: &mut Ui)
+    fn show(mut self, ui: &mut Ui, data: &mut Self::Data)
     where
         Self: Sized,
     {
@@ -72,7 +73,7 @@ pub trait FloatWindow {
                 .default_width(160.0)
                 .scroll2([false, true])
                 .show(ui.ctx(), |ui| {
-                    myself.window_controls(ui);
+                    myself.window_controls(ui, data);
                 });
 
             if !opened {
@@ -84,7 +85,7 @@ pub trait FloatWindow {
 
 macro_rules! impl_window {
     (
-        $window:ident as $title:literal : $state:ident { $($field:ident : $field_type:ty = $field_default:expr),* $(,)+}
+        $window:ident<$data:ty> as $title:literal : $state:ident { $($field:ident : $field_type:ty = $field_default:expr ,)*}
     ) => {
         #[derive(Clone, PartialEq)]
         pub struct $state {
@@ -101,7 +102,7 @@ macro_rules! impl_window {
             }
         }
 
-        impl WindowState for $state {
+        impl $crate::window::WindowState for $state {
             fn open_mut(&mut self) -> &mut bool {
                 &mut self.opened
             }
@@ -112,13 +113,14 @@ macro_rules! impl_window {
             state: $state,
         }
 
-        impl FloatWindow for $window {
+        impl $crate::window::FloatWindow for $window {
+            type Data  = $data;
             type State = $state;
 
             fn new(ui: &mut ::eframe::egui::Ui, id: ::eframe::egui::Id) -> Self {
                 Self {
                     id,
-                    state: $state::get(ui, id),
+                    state: <$state as $crate::window::WindowState>::get(ui, id),
                 }
             }
 
@@ -138,13 +140,14 @@ macro_rules! impl_window {
                 $title
             }
 
-            fn window_controls(&mut self, ui: &mut Ui) {
-                self.controls(ui);
+            fn window_controls(&mut self, ui: &mut ::eframe::egui::Ui, data: &mut Self::Data) {
+                self.controls(ui, data);
             }
         }
     };
 }
 
 mod configure;
+mod shape;
 
-pub use self::configure::ConfigureWindow;
+pub use self::{configure::ConfigureWindow, shape::ShapeDataWindow};

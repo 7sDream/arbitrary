@@ -34,7 +34,7 @@ impl<'a> CornerPointInteract<'a> {
         }
 
         act.context_menu(|ui| {
-            controls::corner_point(&mut self.0, ui);
+            controls::corner_point(self.0, ui);
 
             if !self.0.has_in_ctrl() || !self.0.has_out_ctrl() {
                 ui.menu_button("Add", |ui| {

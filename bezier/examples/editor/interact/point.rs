@@ -1,6 +1,6 @@
 use bezier::Point2D;
 use eframe::{
-    egui::{DragValue, Id, PointerButton, Response, Sense, Ui},
+    egui::{Id, PointerButton, Response, Sense, Ui},
     epaint::{Pos2, Rect, Vec2},
 };
 use egui_plot::PlotTransform;
@@ -83,22 +83,4 @@ impl PointInteract {
             self.response.replace(resp.context_menu(add_contents));
         }
     }
-}
-
-pub fn controls(p: &mut Point, ui: &mut Ui, text: &str) -> bool {
-    let mut changed = false;
-
-    ui.horizontal(|ui| {
-        ui.label(text);
-
-        if ui.add(DragValue::new(&mut p.0.x).prefix("x: ")).changed() {
-            changed = true;
-        }
-
-        if ui.add(DragValue::new(&mut p.0.y).prefix("y: ")).changed() {
-            changed = true;
-        };
-    });
-
-    changed
 }

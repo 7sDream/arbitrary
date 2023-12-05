@@ -26,8 +26,8 @@ impl<'a> SmoothPointInteract<'a> {
             self.0.move_in_ctrl_to(&in_ctrl);
         }
         in_act.context_menu(|ui| {
-            controls::smooth_point_theta(&mut self.0, ui);
-            controls::smooth_point_in_length(&mut self.0, ui);
+            controls::smooth_point_theta(self.0, ui);
+            controls::smooth_point_in_length(self.0, ui);
 
             if ui.button("Same length as out").clicked() {
                 self.0.update_in_length(self.0.out_length());
@@ -42,8 +42,8 @@ impl<'a> SmoothPointInteract<'a> {
             self.0.move_out_ctrl_to(&out_ctrl);
         }
         out_act.context_menu(|ui| {
-            controls::smooth_point_theta(&mut self.0, ui);
-            controls::smooth_point_out_length(&mut self.0, ui);
+            controls::smooth_point_theta(self.0, ui);
+            controls::smooth_point_out_length(self.0, ui);
 
             if ui.button("Same length as in").clicked() {
                 self.0.update_out_length(self.0.in_length());
@@ -68,7 +68,7 @@ impl<'a> SmoothPointInteract<'a> {
         act.drag(self.0.point_mut());
 
         act.context_menu(|ui| {
-            controls::smooth_point(&mut self.0, ui);
+            controls::smooth_point(self.0, ui);
 
             if ui.button("Convert to corner point").clicked() {
                 action.replace(PointAction::ConvertToCorner);

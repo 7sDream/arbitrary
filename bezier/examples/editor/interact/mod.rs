@@ -1,6 +1,6 @@
 use bezier::{CornerPoint, CurvePoint, Nearest, Point2D, Shape, SmoothPoint};
 use eframe::{
-    egui::{CollapsingHeader, Id, Ui},
+    egui::{Id, Ui},
     epaint::Pos2,
 };
 use egui_plot::{PlotResponse, PlotTransform};

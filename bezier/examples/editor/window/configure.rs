@@ -4,7 +4,6 @@ use eframe::{
 };
 use egui_plot::MarkerShape;
 
-use super::{FloatWindow, WindowState};
 use crate::configure::{
     self, Configure, CurvePlotConfig, CurvePointPlotConfig, PlotConfig, PointPlotConfig, ViewConfig,
 };
@@ -44,7 +43,7 @@ enum PlotViewTab {
 }
 
 impl_window! {
-    ConfigureWindow as "Configure" : ConfigureWindowState {
+    ConfigureWindow<Option<()>> as "Configure" : ConfigureWindowState {
         tab: ConfigureWindowTab = ConfigureWindowTab::View,
         plot_tab: PlotViewTab = PlotViewTab::Corner,
     }
@@ -231,7 +230,7 @@ impl ConfigureWindow {
         };
     }
 
-    fn controls(&mut self, ui: &mut Ui) {
+    fn controls(&mut self, ui: &mut Ui, _data: &mut Option<()>) {
         let conf: &mut Configure = &mut configure::write();
 
         ui.horizontal(|ui| {
