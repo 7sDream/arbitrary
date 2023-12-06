@@ -61,8 +61,12 @@ impl<P> SmoothPoint<P> {
         &mut self.point
     }
 
-    pub fn theta(&self) -> f64 {
+    pub fn out_theta(&self) -> f64 {
         self.theta
+    }
+
+    pub fn in_theta(&self) -> f64 {
+        (self.theta + 180.0) % 360.0
     }
 
     pub fn in_length(&self) -> f64 {
@@ -73,16 +77,30 @@ impl<P> SmoothPoint<P> {
         self.out_length
     }
 
-    pub fn update_theta(&mut self, theta: f64) {
+    pub fn update_in_theta(&mut self, theta: f64) {
+        self.theta = (theta + 180.0) % 360.0;
+    }
+
+    pub fn update_out_theta(&mut self, theta: f64) {
         self.theta = theta % 360.0;
+    }
+
+    pub fn flip(&mut self) {
+        self.update_out_theta(self.theta + 180.0);
     }
 
     pub fn update_in_length(&mut self, val: f64) {
         self.in_length = libm::fabs(val);
+        if val < 0.0 {
+            self.flip()
+        }
     }
 
     pub fn update_out_length(&mut self, val: f64) {
         self.out_length = libm::fabs(val);
+        if val < 0.0 {
+            self.flip()
+        }
     }
 }
 
@@ -104,8 +122,28 @@ impl<P: Point2D> SmoothPoint<P> {
         (self.in_length, self.theta) = v.polar();
     }
 
+    pub fn move_in_ctrl_delta(&mut self, delta_x: f64, delta_y: f64, keep_dir: bool) {
+        if keep_dir {
+            let (dir_y, dir_x) = libm::sincos(self.in_theta().to_radians());
+            let length_delta = P::from_xy(delta_x, delta_y).dot(&P::from_xy(dir_x, dir_y));
+            self.update_in_length(self.in_length + length_delta);
+        } else {
+            self.move_in_ctrl_to(&self.in_ctrl().plus(&P::from_xy(delta_x, delta_y)));
+        }
+    }
+
     pub fn move_out_ctrl_to(&mut self, val: &P) {
         let v = val.minus(&self.point);
         (self.out_length, self.theta) = v.polar();
+    }
+
+    pub fn move_out_ctrl_delta(&mut self, delta_x: f64, delta_y: f64, keep_dir: bool) {
+        if keep_dir {
+            let (dir_y, dir_x) = libm::sincos(self.out_theta().to_radians());
+            let length_delta = P::from_xy(delta_x, delta_y).dot(&P::from_xy(dir_x, dir_y));
+            self.update_out_length(self.out_length + length_delta);
+        } else {
+            self.move_out_ctrl_to(&self.out_ctrl().plus(&P::from_xy(delta_x, delta_y)));
+        }
     }
 }

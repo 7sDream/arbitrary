@@ -99,4 +99,28 @@ impl<P: Point2D> CornerPoint<P> {
         let delta = target.minus(&self.point);
         self.move_delta(delta, move_ctrl);
     }
+
+    fn move_ctrl_delta(&self, ctrl: &P, delta_x: f64, delta_y: f64, keep_dir: bool) -> P {
+        if keep_dir {
+            let dir = ctrl.minus(self.point()).normalize();
+            let d = P::from_xy(delta_x, delta_y).dot(&dir);
+            ctrl.plus(&dir.scale(d))
+        } else {
+            ctrl.plus(&P::from_xy(delta_x, delta_y))
+        }
+    }
+
+    pub fn move_in_ctrl_delta(&mut self, delta_x: f64, delta_y: f64, keep_dir: bool) {
+        if let Some(in_ctrl) = self.in_ctrl() {
+            let ctrl = self.move_ctrl_delta(in_ctrl, delta_x, delta_y, keep_dir);
+            self.update_in_ctrl(ctrl);
+        }
+    }
+
+    pub fn move_out_ctrl_delta(&mut self, delta_x: f64, delta_y: f64, keep_dir: bool) {
+        if let Some(out_ctrl) = self.out_ctrl() {
+            let ctrl = self.move_ctrl_delta(out_ctrl, delta_x, delta_y, keep_dir);
+            self.update_out_ctrl(ctrl);
+        }
+    }
 }

@@ -4,7 +4,7 @@ use egui_plot::PlotTransform;
 
 use super::{point::PointInteract, PointAction};
 use crate::{
-    configure::{self, CurvePointPlotConfig},
+    configure::{CurvePointPlotConfig, ViewConfig},
     controls,
     point::Point,
 };
@@ -56,14 +56,14 @@ impl<'a> CornerPointInteract<'a> {
             }
 
             ui.menu_button("Delete", |ui| {
-                ui.add_enabled_ui(self.0.in_ctrl().is_some(), |ui| {
+                ui.add_enabled_ui(self.0.has_in_ctrl(), |ui| {
                     if ui.button("In ctrl point").clicked() {
                         self.0.remove_in_ctrl();
                         ui.close_menu();
                     }
                 });
 
-                ui.add_enabled_ui(self.0.out_ctrl().is_some(), |ui| {
+                ui.add_enabled_ui(self.0.has_out_ctrl(), |ui| {
                     if ui.button("Out ctrl point").clicked() {
                         self.0.remove_out_ctrl();
                         ui.close_menu();
@@ -92,55 +92,60 @@ impl<'a> CornerPointInteract<'a> {
     fn ctrl_interact(
         &mut self, ui: &mut Ui, id: Id, transform: &PlotTransform, opt: &CurvePointPlotConfig,
     ) {
-        let mut delete_in = false;
-        if let Some(p) = self.0.in_ctrl_mut() {
-            let mut in_act = PointInteract::new(p, id.with("in"), ui, *transform, opt.in_ctrl.size);
-            in_act.drag(p);
+        if self.0.has_in_ctrl() {
+            let mut in_act = PointInteract::new(
+                self.0.in_ctrl().unwrap(),
+                id.with("in"),
+                ui,
+                *transform,
+                opt.in_ctrl.size,
+            );
+            if let Some(delta) = in_act.drag_delta() {
+                self.0.move_in_ctrl_delta(delta.0.x, delta.0.y, false);
+            }
             in_act.context_menu(|ui| {
-                controls::point(p, ui, "In ctrl");
+                controls::point(self.0.in_ctrl_mut().unwrap(), ui, "In ctrl");
 
                 if ui.button("Delete").clicked() {
-                    delete_in = true;
+                    self.0.remove_in_ctrl();
                     ui.close_menu();
                 }
             });
         }
-        if delete_in {
-            self.0.remove_in_ctrl();
-        }
 
-        let mut delete_out = false;
-        if let Some(p) = self.0.out_ctrl_mut() {
-            let mut out_act =
-                PointInteract::new(p, id.with("out"), ui, *transform, opt.out_ctrl.size);
-            out_act.drag(p);
-            out_act.context_menu(|ui| {
-                controls::point(p, ui, "Out ctrl");
+        if self.0.has_out_ctrl() {
+            let mut in_act = PointInteract::new(
+                self.0.out_ctrl().unwrap(),
+                id.with("in"),
+                ui,
+                *transform,
+                opt.in_ctrl.size,
+            );
+            if let Some(delta) = in_act.drag_delta() {
+                self.0.move_out_ctrl_delta(delta.0.x, delta.0.y, false);
+            }
+            in_act.context_menu(|ui| {
+                controls::point(self.0.out_ctrl_mut().unwrap(), ui, "Out ctrl");
 
                 if ui.button("Delete").clicked() {
-                    delete_out = true;
+                    self.0.remove_out_ctrl();
                     ui.close_menu();
                 }
             });
-        }
-        if delete_out {
-            self.0.remove_out_ctrl();
         }
     }
 
     pub fn interact(
-        &mut self, ui: &mut Ui, id: Id, transform: &PlotTransform,
+        &mut self, ui: &mut Ui, id: Id, transform: &PlotTransform, view: &ViewConfig,
+        opt: &CurvePointPlotConfig,
     ) -> Option<PointAction> {
-        let conf = configure::read();
-        let opt = &conf.plot.cornel;
-
         let mut action = None;
 
-        if conf.view.point {
+        if view.point {
             action = self.point_interact(ui, id, transform, opt);
         }
 
-        if conf.view.ctrl {
+        if view.ctrl {
             self.ctrl_interact(ui, id, transform, opt);
         }
 

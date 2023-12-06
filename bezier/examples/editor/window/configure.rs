@@ -43,7 +43,7 @@ enum PlotViewTab {
 }
 
 impl_window! {
-    ConfigureWindow<Option<()>> as "Configure" : ConfigureWindowState {
+    ConfigureWindow<Configure> as "Configure" : ConfigureWindowState {
         tab: ConfigureWindowTab = ConfigureWindowTab::View,
         plot_tab: PlotViewTab = PlotViewTab::Corner,
     }
@@ -230,17 +230,15 @@ impl ConfigureWindow {
         };
     }
 
-    fn controls(&mut self, ui: &mut Ui, _data: &mut Option<()>) {
-        let conf: &mut Configure = &mut configure::write();
-
+    fn controls(&mut self, ui: &mut Ui, data: &mut Configure) {
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.state.tab, ConfigureWindowTab::View, "View");
             ui.selectable_value(&mut self.state.tab, ConfigureWindowTab::Plot, "Plot");
         });
         ui.separator();
         match self.state.tab {
-            ConfigureWindowTab::View => Self::tab_view(ui, &mut conf.view),
-            ConfigureWindowTab::Plot => self.tab_plot(ui, &mut conf.plot),
+            ConfigureWindowTab::View => Self::tab_view(ui, &mut data.view),
+            ConfigureWindowTab::Plot => self.tab_plot(ui, &mut data.plot),
         }
     }
 }

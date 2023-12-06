@@ -43,13 +43,13 @@ pub fn smooth_point_theta(sp: &mut SmoothPoint<Point>, ui: &mut Ui) {
     ui.horizontal(|ui| {
         ui.label("Theta: ");
 
-        let mut theta = sp.theta();
+        let mut theta = sp.out_theta();
         let slider = Slider::new(&mut theta, 0.0..=359.999)
             .smart_aim(true)
             .suffix("°");
 
         if ui.add(slider).changed() {
-            sp.update_theta(theta);
+            sp.update_out_theta(theta);
         }
     });
 }

@@ -4,7 +4,7 @@ use egui_plot::PlotTransform;
 
 use super::{point::PointInteract, PointAction};
 use crate::{
-    configure::{self, CurvePointPlotConfig},
+    configure::{CurvePointPlotConfig, ViewConfig},
     controls,
     point::Point,
 };
@@ -19,11 +19,16 @@ impl<'a> SmoothPointInteract<'a> {
     fn ctrl_interact(
         &mut self, ui: &mut Ui, id: Id, transform: &PlotTransform, opt: &CurvePointPlotConfig,
     ) {
-        let mut in_ctrl = self.0.in_ctrl();
-        let mut in_act =
-            PointInteract::new(&in_ctrl, id.with("in"), ui, *transform, opt.in_ctrl.size);
-        if in_act.drag(&mut in_ctrl) {
-            self.0.move_in_ctrl_to(&in_ctrl);
+        let mut in_act = PointInteract::new(
+            &self.0.in_ctrl(),
+            id.with("in"),
+            ui,
+            *transform,
+            opt.in_ctrl.size,
+        );
+        if let Some(delta) = in_act.drag_delta() {
+            // TODO: keep dir drag when press some key
+            self.0.move_in_ctrl_delta(delta.0.x, delta.0.y, false);
         }
         in_act.context_menu(|ui| {
             controls::smooth_point_theta(self.0, ui);
@@ -35,11 +40,15 @@ impl<'a> SmoothPointInteract<'a> {
             }
         });
 
-        let mut out_ctrl = self.0.out_ctrl();
-        let mut out_act =
-            PointInteract::new(&out_ctrl, id.with("out"), ui, *transform, opt.out_ctrl.size);
-        if out_act.drag(&mut out_ctrl) {
-            self.0.move_out_ctrl_to(&out_ctrl);
+        let mut out_act = PointInteract::new(
+            &self.0.out_ctrl(),
+            id.with("out"),
+            ui,
+            *transform,
+            opt.out_ctrl.size,
+        );
+        if let Some(delta) = out_act.drag_delta() {
+            self.0.move_out_ctrl_delta(delta.0.x, delta.0.y, false);
         }
         out_act.context_menu(|ui| {
             controls::smooth_point_theta(self.0, ui);
@@ -88,18 +97,16 @@ impl<'a> SmoothPointInteract<'a> {
     }
 
     pub fn interact(
-        &mut self, ui: &mut Ui, id: Id, transform: &PlotTransform,
+        &mut self, ui: &mut Ui, id: Id, transform: &PlotTransform, view: &ViewConfig,
+        opt: &CurvePointPlotConfig,
     ) -> Option<PointAction> {
-        let conf = configure::read();
-        let opt = &conf.plot.smooth;
-
         let mut action = None;
 
-        if conf.view.point {
+        if view.point {
             action = self.point_interact(ui, id, transform, opt);
         }
 
-        if conf.view.ctrl {
+        if view.ctrl {
             self.ctrl_interact(ui, id, transform, opt);
         }
 

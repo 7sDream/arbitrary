@@ -8,7 +8,7 @@ use egui_plot::{HPlacement, Plot};
 use crate::{
     configure,
     interact::ShapeInteract,
-    plot::plot_shape,
+    plot::shape,
     point::Point,
     window::{ConfigureWindow, FloatWindow, ShapeDataWindow},
 };
@@ -72,14 +72,14 @@ impl App for Application {
         });
 
         CentralPanel::default().show(ctx, |ui| {
-            ConfigureWindow::new(ui, self.configure_window_id()).show(ui, &mut None);
+            ConfigureWindow::new(ui, self.configure_window_id()).show(ui, &mut configure::write());
             ShapeDataWindow::new(ui, self.shape_window_id()).show(ui, &mut self.shape);
 
             if ctx.input(|i| i.key_released(Key::C)) {
                 self.shape.toggle_close();
             }
 
-            let show_grid = configure::read().view.grid;
+            let conf = configure::read();
 
             let response = Plot::new(self.id.with("shape_canvas"))
                 .data_aspect(1.0)
@@ -87,20 +87,21 @@ impl App for Application {
                 .include_x(50.0)
                 .include_y(-30.0)
                 .include_y(10.0)
-                .show_grid(show_grid)
+                .show_grid(conf.view.grid)
                 .show_x(false)
                 .show_y(false)
                 .allow_drag(ui.input(|i| i.key_down(Key::Space)))
                 .y_axis_width(3)
                 .y_axis_position(HPlacement::Right)
                 .show(ui, |ui| {
-                    plot_shape(&self.shape, ui);
+                    shape(&self.shape, ui, &conf);
                 });
 
             ShapeInteract::new(&mut self.shape).interact(
                 ui,
                 self.id.with("shape_interact"),
                 &response,
+                &conf,
             );
         });
     }

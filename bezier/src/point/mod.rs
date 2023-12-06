@@ -31,6 +31,18 @@ pub trait Point2D: Clone {
         libm::sqrt(x * x + y * y)
     }
 
+    fn normalize(&self) -> Self {
+        let [x, y] = self.array();
+
+        if x == 0.0 && y == 0.0 {
+            return Self::from_xy(1.0, 0.0);
+        }
+
+        let d = self.length_from_origin();
+
+        Self::from_xy(x / d, y / d)
+    }
+
     #[inline(always)]
     fn distance(&self, rhs: &Self) -> f64 {
         self.minus(rhs).length_from_origin()

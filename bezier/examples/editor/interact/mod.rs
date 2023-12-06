@@ -6,7 +6,10 @@ use eframe::{
 use egui_plot::{PlotResponse, PlotTransform};
 
 use self::{corner::CornerPointInteract, smooth::SmoothPointInteract};
-use crate::point::Point;
+use crate::{
+    configure::{Configure, PlotConfig, ViewConfig},
+    point::Point,
+};
 
 mod point;
 mod corner;
@@ -23,11 +26,16 @@ struct CurvePointInteract<'a>(&'a mut CurvePoint<Point>);
 
 impl<'a> CurvePointInteract<'a> {
     pub fn interact(
-        &mut self, ui: &mut Ui, id: Id, transform: &PlotTransform,
+        &mut self, ui: &mut Ui, id: Id, transform: &PlotTransform, view: &ViewConfig,
+        opt: &PlotConfig,
     ) -> Option<PointAction> {
         match self.0 {
-            CurvePoint::Corner(cp) => CornerPointInteract::new(cp).interact(ui, id, transform),
-            CurvePoint::Smooth(sp) => SmoothPointInteract::new(sp).interact(ui, id, transform),
+            CurvePoint::Corner(cp) => {
+                CornerPointInteract::new(cp).interact(ui, id, transform, view, &opt.cornel)
+            }
+            CurvePoint::Smooth(sp) => {
+                SmoothPointInteract::new(sp).interact(ui, id, transform, view, &opt.smooth)
+            }
         }
     }
 }
@@ -130,12 +138,16 @@ impl<'a> ShapeInteract<'a> {
         }
     }
 
-    pub fn interact<R>(&mut self, ui: &mut Ui, id: Id, response: &PlotResponse<R>) {
+    pub fn interact<R>(
+        &mut self, ui: &mut Ui, id: Id, response: &PlotResponse<R>, conf: &Configure,
+    ) {
         let mut act = None;
 
         for (i, point) in self.shape.points_mut().iter_mut().enumerate() {
             let mut interact = CurvePointInteract(point);
-            if let Some(action) = interact.interact(ui, id.with(i), &response.transform) {
+            if let Some(action) =
+                interact.interact(ui, id.with(i), &response.transform, &conf.view, &conf.plot)
+            {
                 act.replace((i, action));
             }
         }
