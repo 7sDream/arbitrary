@@ -72,8 +72,10 @@ pub trait FloatWindow {
                 .default_open(true)
                 .default_width(160.0)
                 .scroll2([false, true])
+                .max_height(f32::MAX)
                 .show(ui.ctx(), |ui| {
                     myself.window_controls(ui, data);
+                    ui.allocate_space((0.0, ui.available_height()).into());
                 });
 
             if !opened {

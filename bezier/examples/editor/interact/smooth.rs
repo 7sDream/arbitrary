@@ -80,7 +80,7 @@ impl<'a> SmoothPointInteract<'a> {
             controls::smooth_point(self.0, ui);
 
             if ui.button("Convert to corner point").clicked() {
-                action.replace(PointAction::ConvertToCorner);
+                action.replace(PointAction::SmoothConvertToCorner);
                 ui.close_menu();
             }
 

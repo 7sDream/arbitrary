@@ -1,4 +1,4 @@
-use bezier::{CornerPoint, CurvePoint, Nearest, Point2D, Shape, SmoothPoint};
+use bezier::{CornerPoint, Curve, CurvePoint, Nearest, Point2D, Shape, SmoothPoint};
 use eframe::{
     egui::{Id, Ui},
     epaint::Pos2,
@@ -18,8 +18,10 @@ mod smooth;
 enum PointAction {
     Click,
     Delete,
-    ConvertToCorner,
-    ConvertToSmooth,
+    CornerAddInCtrl,
+    CornerAddOutCtrl,
+    SmoothConvertToCorner,
+    CornerConvertToSmooth,
 }
 
 struct CurvePointInteract<'a>(&'a mut CurvePoint<Point>);
@@ -59,7 +61,49 @@ impl<'a> ShapeInteract<'a> {
             PointAction::Delete => {
                 self.shape.remove(index);
             }
-            PointAction::ConvertToCorner => {
+            PointAction::CornerAddInCtrl => {
+                let points = self.shape.points_mut();
+                let last = if index == 0 {
+                    points.len() - 1
+                } else {
+                    index - 1
+                };
+
+                let curve = Curve::new(&points[last], &points[index]);
+
+                match curve {
+                    Curve::Segment(_) => {
+                        let ctrl = points[index].point().plus(points[last].point()).scale(0.5);
+                        points[index].update_in_ctrl(ctrl);
+                    }
+                    Curve::Bezier(b) => {
+                        points[last].update_out_ctrl(b.ctrl1);
+                        points[index].update_in_ctrl(b.ctrl2);
+                    }
+                }
+            }
+            PointAction::CornerAddOutCtrl => {
+                let points = self.shape.points_mut();
+                let next = if index + 1 == points.len() {
+                    0
+                } else {
+                    index + 1
+                };
+
+                let curve = Curve::new(&points[index], &points[next]);
+
+                match curve {
+                    Curve::Segment(_) => {
+                        let ctrl = points[index].point().plus(points[next].point()).scale(0.5);
+                        points[index].update_out_ctrl(ctrl);
+                    }
+                    Curve::Bezier(b) => {
+                        points[index].update_out_ctrl(b.ctrl1);
+                        points[next].update_in_ctrl(b.ctrl2);
+                    }
+                }
+            }
+            PointAction::SmoothConvertToCorner => {
                 let old = &self.shape.points()[index];
                 let mut p = CornerPoint::new(*old.point());
                 if let Some(in_ctrl) = old.in_ctrl() {
@@ -70,7 +114,7 @@ impl<'a> ShapeInteract<'a> {
                 }
                 self.shape.replace(index, p.into());
             }
-            PointAction::ConvertToSmooth => {
+            PointAction::CornerConvertToSmooth => {
                 let old = &self.shape.points()[index];
                 let point = *old.point();
 

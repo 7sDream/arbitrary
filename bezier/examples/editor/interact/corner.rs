@@ -1,4 +1,4 @@
-use bezier::{CornerPoint, Point2D};
+use bezier::CornerPoint;
 use eframe::egui::{Id, Ui};
 use egui_plot::PlotTransform;
 
@@ -40,15 +40,13 @@ impl<'a> CornerPointInteract<'a> {
                 ui.menu_button("Add", |ui| {
                     ui.add_enabled_ui(!self.0.has_in_ctrl(), |ui| {
                         if ui.button("In ctrl point").clicked() {
-                            let p = Point::from_xy(self.0.point().x() - 10.0, self.0.point().y());
-                            self.0.update_in_ctrl(p);
+                            action.replace(PointAction::CornerAddInCtrl);
                             ui.close_menu();
                         }
                     });
                     ui.add_enabled_ui(!self.0.has_out_ctrl(), |ui| {
                         if ui.button("Out ctrl point").clicked() {
-                            let p = Point::from_xy(self.0.point().x() + 10.0, self.0.point().y());
-                            self.0.update_out_ctrl(p);
+                            action.replace(PointAction::CornerAddOutCtrl);
                             ui.close_menu();
                         }
                     });
@@ -77,7 +75,7 @@ impl<'a> CornerPointInteract<'a> {
             });
 
             if ui.button("Convert to smooth point").clicked() {
-                action.replace(PointAction::ConvertToSmooth);
+                action.replace(PointAction::CornerConvertToSmooth);
                 ui.close_menu();
             }
         });
@@ -116,10 +114,10 @@ impl<'a> CornerPointInteract<'a> {
         if self.0.has_out_ctrl() {
             let mut in_act = PointInteract::new(
                 self.0.out_ctrl().unwrap(),
-                id.with("in"),
+                id.with("out"),
                 ui,
                 *transform,
-                opt.in_ctrl.size,
+                opt.out_ctrl.size,
             );
             if let Some(delta) = in_act.drag_delta() {
                 self.0.move_out_ctrl_delta(delta.0.x, delta.0.y, false);

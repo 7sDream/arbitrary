@@ -100,25 +100,23 @@ pub fn curve_point(p: &mut CurvePoint<Point>, ui: &mut Ui) {
 
 pub fn shape(s: &mut Shape<Point>, ui: &mut Ui, id: Id) {
     let mut deleted = None;
+
     for (i, p) in s.points_mut().iter_mut().enumerate() {
-        if let Some(Some(del)) = CollapsingHeader::new(i.to_string().as_str())
+        let resp = CollapsingHeader::new(i.to_string().as_str())
             .id_source(id.with(i))
             .show(ui, |ui| {
-                curve_point(p, ui);
-
-                if ui.button("Delete").clicked() {
-                    return Some(i);
-                }
-
-                None
-            })
-            .body_returned
-        {
-            deleted.replace(del);
-        }
+                ui.group(|ui| {
+                    curve_point(p, ui);
+                });
+            });
+        resp.header_response.context_menu(|ui| {
+            if ui.button("Delete").clicked() {
+                deleted.replace(i);
+            }
+        });
     }
 
-    if let Some(del) = deleted {
-        s.remove(del);
+    if let Some(index) = deleted {
+        s.remove(index);
     }
 }
