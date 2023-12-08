@@ -40,10 +40,12 @@
 
 #![no_std]
 
+#[macro_use]
 extern crate alloc;
 
 mod curve;
 mod point;
 mod shape;
+mod math;
 
 pub use self::{curve::*, point::*, shape::*};
