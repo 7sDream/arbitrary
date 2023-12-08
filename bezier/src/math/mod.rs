@@ -15,6 +15,10 @@ impl Poly {
         self.c.len() - 1
     }
 
+    pub fn is_zero(&self) -> bool {
+        *self.c.first().unwrap() == 0.0
+    }
+
     pub fn derivative(&self) -> Poly {
         if self.c.len() == 1 {
             return Self { c: vec![0.0] };
@@ -29,14 +33,19 @@ impl Poly {
             .collect()
     }
 
-    fn div_once(dividend: &Poly, divisor: &Poly) -> (f64, Poly) {
-        let quotient = dividend.c[0] / divisor.c[0];
+    fn div_once(dividend: &mut Poly, divisor: &Poly) -> Option<f64> {
+        if dividend.is_zero() || dividend.degree() < divisor.degree() {
+            return None;
+        }
+
+        let q = dividend.c[0] / divisor.c[0];
 
         let a = dividend.c.iter().skip(1).copied();
         let b = divisor.c.iter().copied().chain(repeat(0.0)).skip(1);
-        let reminder = a.zip(b).map(|(a, b)| a - b * quotient).collect();
+        let r = a.zip(b).map(|(a, b)| a - b * q).collect();
 
-        (quotient, reminder)
+        *dividend = r;
+        Some(q)
     }
 
     pub fn div(&self, divisor: &Poly) -> (Poly, Poly) {
@@ -44,23 +53,14 @@ impl Poly {
             return (Self::zero(), self.clone());
         }
 
-        let quotient_coefficient_len = self.degree() - divisor.degree() + 1;
+        let q_len = self.degree() - divisor.degree() + 1;
 
-        let mut remainder = self.clone();
-        let mut quotient: Poly = core::iter::from_fn(|| {
-            if remainder.degree() >= divisor.degree() {
-                let (q, r) = Self::div_once(&remainder, divisor);
-                remainder = r;
-                Some(q)
-            } else {
-                None
-            }
-        })
-        .collect();
+        let mut r = self.clone();
+        let mut q: Poly = core::iter::from_fn(|| Self::div_once(&mut r, divisor)).collect();
 
-        quotient.c.resize(quotient_coefficient_len, 0.0);
+        q.c.resize(q_len, 0.0);
 
-        (quotient, remainder)
+        (q, r)
     }
 }
 
@@ -119,5 +119,14 @@ mod test {
         let (q, r) = dividend.div(&divisor);
         assert_eq!(q.c, [1.0, -9.0, -27.0]);
         assert_eq!(r.c, [-123.0]);
+    }
+
+    #[test]
+    fn poly_div_no_reminder() {
+        let dividend: Poly = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0].into_iter().collect();
+        let divisor: Poly = [1.0, 0.0, 0.0, 0.0].into_iter().collect();
+        let (q, r) = dividend.div(&divisor);
+        assert_eq!(q.c, [1.0, 0.0, 0.0]);
+        assert!(r.is_zero());
     }
 }
