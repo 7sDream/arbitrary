@@ -48,4 +48,4 @@ mod point;
 mod shape;
 mod math;
 
-pub use self::{curve::*, point::*, shape::*};
+pub use self::{curve::*, math::*, point::*, shape::*};

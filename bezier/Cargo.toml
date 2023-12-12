@@ -7,6 +7,10 @@ edition = "2021"
 name = "bezier"
 path = "src/lib.rs"
 
+[[bench]]
+name = "poly"
+harness = false
+
 [[example]]
 name = "editor"
 path = "examples/editor/main.rs"
@@ -20,6 +24,7 @@ faer-evd = { version = "0.15", default-features = false }
 libm = "0.2"
 
 [dev-dependencies]
+criterion = "0.5.1"
 eframe = { version = "0.24", default-features = false, features = [
     "glow",
     "wayland",

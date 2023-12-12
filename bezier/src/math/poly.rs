@@ -1,10 +1,7 @@
 use alloc::vec::Vec;
-use core::{
-    cmp::Ordering,
-    iter::repeat,
-    num::FpCategory,
-    ops::{Deref, Range, RangeBounds, RangeInclusive},
-};
+use core::{iter::repeat, ops::Range};
+
+use super::SturmSeq;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Poly {
@@ -18,16 +15,24 @@ pub enum Root {
 }
 
 impl Poly {
+    #[inline(always)]
     pub fn zero() -> Self {
         Self { c: vec![0.0] }
     }
 
+    #[inline(always)]
     pub fn degree(&self) -> usize {
         self.c.len() - 1
     }
 
+    #[inline(always)]
     pub fn is_zero(&self) -> bool {
         *self.c.first().unwrap() == 0.0
+    }
+
+    #[inline(always)]
+    pub fn coefficients(&self) -> &'_ [f64] {
+        &self.c
     }
 
     pub fn neg(&self) -> Poly {
@@ -35,12 +40,12 @@ impl Poly {
     }
 
     pub fn derivative(&self) -> Poly {
-        if self.c.len() == 1 {
-            return Self { c: vec![0.0] };
+        if self.degree() == 0 {
+            return Self::zero();
         }
 
-        let degree = self.c.len() - 1;
-        self.c
+        let degree = self.degree();
+        self.coefficients()
             .iter()
             .enumerate()
             .take(degree)
@@ -79,9 +84,15 @@ impl Poly {
     }
 
     pub fn eval(&self, x: f64) -> f64 {
+        assert!(!x.is_nan());
+
         if self.degree() > 0 && x.is_infinite() {
             return f64::INFINITY
-                * self.c[0].signum()
+                * if self.c[0].is_sign_negative() {
+                    -1.0
+                } else {
+                    1.0
+                }
                 * if x.is_sign_positive() || self.degree() % 2 == 0 {
                     1.0
                 } else {
@@ -89,49 +100,19 @@ impl Poly {
                 };
         }
 
-        let mut i = self.c.iter();
-        let an = i.next().unwrap();
-        i.fold(*an, |acc, c| acc * x + c)
-    }
-
-    fn sturm_seq(&self) -> SturmSeq {
-        let mut result = Vec::with_capacity(self.degree());
-
-        result.push(self.clone());
-
-        if self.degree() < 1 {
-            return SturmSeq(result);
-        }
-
-        let mut divided = self.clone();
-        let mut last = self.derivative();
-        loop {
-            let (_, r) = divided.div(&last);
-            if r.is_zero() {
-                break;
-            } else {
-                result.push(last.clone());
-                divided = last;
-                last = r.neg();
-            }
-        }
-
-        result.push(last);
-
-        SturmSeq(result)
+        self.c.iter().fold(0.0, |acc, c| acc * x + c)
     }
 
     pub fn real_roots(&self) -> Root {
-        let max = self.c.iter().copied().fold(f64::INFINITY, |acc, c| {
-            if acc.total_cmp(&c) == Ordering::Less {
-                c
-            } else {
-                acc
-            }
-        });
+        let c_abs_max = self
+            .c
+            .iter()
+            .copied()
+            .map(libm::fabs)
+            .fold(0.0_f64, f64::max);
 
-        let normalized = self.c[0] / max;
-        self.real_roots_in(-normalized..normalized)
+        let bound = libm::fabs(self.c[0] / c_abs_max);
+        self.real_roots_in(-bound..bound)
     }
 
     pub fn real_roots_in(&self, range: Range<f64>) -> Root {
@@ -153,13 +134,9 @@ impl Poly {
             }
         }
 
-        let sturm = self.sturm_seq();
-        let state = IsolateRootState::default();
-        let root_ranges = sturm.isolate_roots_iter(range, state);
-
-        let roots: Vec<_> = root_ranges
-            .filter_map(|r| self.newton_find_root_in(r))
-            .collect();
+        let sturm = SturmSeq::new(self);
+        let ranges = sturm.isolate_real_roots_iter(range, 1e-6);
+        let roots: Vec<_> = ranges.filter_map(|r| self.newton_find_root_in(r)).collect();
 
         if roots.is_empty() {
             Root::None
@@ -187,90 +164,6 @@ impl FromIterator<f64> for Poly {
         } else {
             Self { c: coefficients }
         }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-struct SturmSeq(Vec<Poly>);
-
-impl Deref for SturmSeq {
-    type Target = [Poly];
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-enum Sign {
-    Zero,
-    Positive,
-    Negative,
-}
-
-#[derive(Default)]
-struct IsolateRootState {
-    queue: Vec<(f64, Option<usize>, f64, Option<usize>)>,
-}
-
-impl SturmSeq {
-    fn eval(&self, x: f64) -> impl Iterator<Item = f64> + '_ {
-        self.0.iter().map(move |p| p.eval(x))
-    }
-
-    fn signs_at(&self, x: f64) -> impl Iterator<Item = Sign> + '_ {
-        self.eval(x).map(|x| {
-            if x == 0.0 {
-                Sign::Zero
-            } else if x.is_sign_negative() {
-                Sign::Negative
-            } else {
-                Sign::Positive
-            }
-        })
-    }
-
-    pub fn sign_changes_at(&self, x: f64) -> usize {
-        let mut i = self.signs_at(x);
-        let first = i.next().unwrap();
-        i.fold((first, 0), |(last, acc), current| {
-            if current == Sign::Zero || last == current {
-                (last, acc)
-            } else {
-                (current, acc + 1)
-            }
-        })
-        .1
-    }
-
-    pub fn isolate_roots_iter(
-        &self, range: Range<f64>, mut state: IsolateRootState,
-    ) -> impl Iterator<Item = Range<f64>> + '_ {
-        state.queue.push((range.start, None, range.end, None));
-        core::iter::from_fn(move || self.isolate_roots_iter_fn(&mut state))
-    }
-
-    fn isolate_roots_iter_fn<'i, 'x>(
-        &'i self, state: &'x mut IsolateRootState,
-    ) -> Option<Range<f64>> {
-        while let Some((start, d1, end, d2)) = state.queue.pop() {
-            let d1 = d1.unwrap_or_else(|| self.sign_changes_at(start));
-            let d2 = d2.unwrap_or_else(|| self.sign_changes_at(end));
-
-            if d1 == d2 {
-                continue;
-            }
-
-            if d2 + 1 == d1 {
-                return Some(start..end);
-            }
-
-            let mid = (start + end) / 2.0;
-            state.queue.push((start, Some(d1), end, None));
-            state.queue.push((mid, None, end, Some(d2)));
-        }
-
-        None
     }
 }
 
@@ -339,21 +232,5 @@ mod test {
         let poly: Poly = [2.0, -6.0, 2.0, -1.0].into_iter().collect();
         assert_eq!(poly.eval(f64::INFINITY), f64::INFINITY);
         assert_eq!(poly.eval(f64::NEG_INFINITY), f64::NEG_INFINITY);
-    }
-
-    #[test]
-    fn poly_sturm_seq() {
-        let poly: Poly = [1.0, 1.0, 0.0, -1.0, -1.0].into_iter().collect();
-        let strum = poly.sturm_seq();
-
-        assert_eq!(strum.len(), 5);
-        assert_eq!(strum[0], poly);
-        assert_eq!(strum[1], poly.derivative());
-        assert_eq!(strum[2].c, [3.0 / 16.0, 3.0 / 4.0, 15.0 / 16.0]);
-        assert_eq!(strum[3].c, [-32.0, -64.0]);
-        assert_eq!(strum[4].c, [-3.0 / 16.0]);
-
-        assert_eq!(strum.sign_changes_at(f64::NEG_INFINITY), 3);
-        assert_eq!(strum.sign_changes_at(f64::INFINITY), 1);
     }
 }
