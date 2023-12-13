@@ -1,5 +1,8 @@
 use alloc::vec::Vec;
-use core::{iter::repeat, ops::Range};
+use core::{
+    iter::repeat,
+    ops::{Range, RangeInclusive},
+};
 
 use super::SturmSeq;
 
@@ -8,6 +11,7 @@ pub struct Poly {
     c: Vec<f64>,
 }
 
+#[derive(Debug)]
 pub enum Root {
     None,
     Any,
@@ -100,7 +104,8 @@ impl Poly {
                 };
         }
 
-        self.c.iter().fold(0.0, |acc, c| acc * x + c)
+        // mul_add is slower then acc * x + c, but more accurate according to doc
+        self.c.iter().copied().fold(0.0, |acc, c| acc.mul_add(x, c))
     }
 
     pub fn real_roots(&self) -> Root {
@@ -111,11 +116,11 @@ impl Poly {
             .map(libm::fabs)
             .fold(0.0_f64, f64::max);
 
-        let bound = libm::fabs(self.c[0] / c_abs_max);
-        self.real_roots_in(-bound..bound)
+        let bound = 1.0 + c_abs_max / libm::fabs(self.c[0]);
+        self.real_roots_in(-bound..=bound)
     }
 
-    pub fn real_roots_in(&self, range: Range<f64>) -> Root {
+    pub fn real_roots_in(&self, range: RangeInclusive<f64>) -> Root {
         if self.degree() == 0 {
             if self.is_zero() {
                 return Root::Any;
@@ -135,8 +140,14 @@ impl Poly {
         }
 
         let sturm = SturmSeq::new(self);
-        let ranges = sturm.isolate_real_roots_iter(range, 1e-6);
-        let roots: Vec<_> = ranges.filter_map(|r| self.newton_find_root_in(r)).collect();
+        let ranges = sturm.isolate_real_roots_iter(*range.start(), *range.end(), f64::MAX);
+        let mut roots: Vec<_> = ranges
+            .filter_map(|(start, end)| self.newton_find_root_in(&sturm[1], start, end))
+            .collect();
+
+        if self.eval(*range.start()) == 0.0 {
+            roots.push(*range.start())
+        }
 
         if roots.is_empty() {
             Root::None
@@ -145,8 +156,80 @@ impl Poly {
         }
     }
 
-    pub fn newton_find_root_in(&self, range: Range<f64>) -> Option<f64> {
-        todo!()
+    // Get a series point in the [start, end] range, in binary search order:
+    //
+    // e.g. for [0.0, 1.0]:
+    //
+    //                            1/2
+    //              1/4                          3/4
+    //      1/8            3/8           5/8             7/8
+    // 1/16     3/16   5/16   7/16   9/16   11/16   13/16   15/16
+    //   ....................................................
+    //
+    // The order is row by row, bigger first.
+    //
+    // The iterator stops when reach the row which will split the region more then `max` pieces.
+    // `max` must be a power of two.
+    fn interval_binary_split_points(
+        start: f64, end: f64, mut max: usize,
+    ) -> impl Iterator<Item = f64> {
+        assert!(max.is_power_of_two());
+
+        let mut acc = end;
+        let mut step = end - start;
+
+        core::iter::from_fn(move || {
+            acc -= step;
+            if acc <= start {
+                step /= 2.0;
+                max /= 2;
+                if max == 0 {
+                    return None;
+                }
+                acc = end - step;
+            }
+
+            Some(acc)
+        })
+    }
+
+    // left open right close interval (start, end]
+    fn newton_find_root_in(&self, d: &Poly, start: f64, end: f64) -> Option<f64> {
+        [end, start]
+            .into_iter()
+            .chain(Self::interval_binary_split_points(
+                start,
+                end,
+                1_usize.rotate_right(1),
+            ))
+            .filter_map(|at| self.newton_find_root_at(d, at))
+            .find(|x| start < *x && *x <= end)
+    }
+
+    fn newton_find_root_at(&self, d: &Poly, at: f64) -> Option<f64> {
+        let eps = -f64::EPSILON..=f64::EPSILON;
+        let mut x = at;
+
+        loop {
+            let dv = d.eval(x);
+            let fv = self.eval(x);
+
+            if eps.contains(&fv) {
+                return Some(x);
+            }
+
+            // meet local extremum, but not zero
+            if eps.contains(&dv) {
+                return None;
+            }
+
+            let delta = fv / dv;
+            x -= delta;
+
+            if eps.contains(&delta) {
+                return Some(x);
+            }
+        }
     }
 }
 
@@ -232,5 +315,11 @@ mod test {
         let poly: Poly = [2.0, -6.0, 2.0, -1.0].into_iter().collect();
         assert_eq!(poly.eval(f64::INFINITY), f64::INFINITY);
         assert_eq!(poly.eval(f64::NEG_INFINITY), f64::NEG_INFINITY);
+    }
+
+    #[test]
+    fn poly_real_roots() {
+        let poly: Poly = [1.0, -2.0, 0.25, 0.75].into_iter().collect();
+        dbg!(poly.real_roots());
     }
 }

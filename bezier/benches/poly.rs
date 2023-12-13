@@ -1,10 +1,9 @@
 use bezier::{Poly, SturmSeq};
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 
-fn poly_sturm_play(eps: f64) {
+fn poly_sturm() {
     let poly: Poly = [1.0, -4.0, 2.0, 0.0, -3.0, 7.0].into_iter().collect();
-    let sturm = SturmSeq::new(&poly);
-    let _ = sturm.isolate_real_roots(-7.0..7.0, eps);
+    let _ = poly.real_roots();
 }
 
 fn solve_poly(coefficients: [f64; 6]) -> Option<(faer_core::Mat<f64>, faer_core::Mat<f64>)> {
@@ -78,9 +77,7 @@ fn poly_evd() {
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
-    c.bench_function("poly_sturm", |b| {
-        b.iter(|| poly_sturm_play(black_box(1e-6)))
-    });
+    c.bench_function("poly_sturm", |b| b.iter(|| poly_sturm()));
     c.bench_function("poly_evd", |b| b.iter(|| poly_evd()));
 }
 

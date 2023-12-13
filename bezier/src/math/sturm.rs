@@ -38,13 +38,10 @@ struct IsolateRootState {
 }
 
 impl IsolateRootState {
-    fn new(range: Range<f64>, degree: usize, eps: f64) -> Self {
+    fn new(start: f64, end: f64, degree: usize, eps: f64) -> Self {
         let mut queue = Vec::with_capacity(degree + 1);
-        queue.push(IsolateTask::Check(range.start, range.end, None, None));
-        Self {
-            queue: vec![IsolateTask::Check(range.start, range.end, None, None)],
-            eps,
-        }
+        queue.push(IsolateTask::Check(start, end, None, None));
+        Self { queue, eps }
     }
 
     fn pop_task(&mut self) -> Option<IsolateTask> {
@@ -101,36 +98,44 @@ impl SturmSeq {
     }
 
     fn sign_changes_at(&self, x: f64) -> usize {
-        let mut i = self.signs_at(x);
-        let first = i.next().unwrap();
-        i.fold((first, 0), |(last, acc), current| {
-            if current == Sign::Zero || last == current {
-                (last, acc)
-            } else {
-                (current, acc + 1)
-            }
-        })
-        .1
+        let mut changes = 0;
+
+        self.signs_at(x)
+            .filter(|s| !matches!(s, Sign::Zero))
+            .reduce(|last, current| {
+                if current != last {
+                    changes += 1
+                }
+                current
+            });
+
+        changes
     }
 
-    // The range bounds must be finite(not Infinite or NaN).
-    pub fn isolate_real_roots(&self, range: Range<f64>, eps: f64) -> Vec<Range<f64>> {
-        self.isolate_real_roots_iter(range, eps).collect()
+    pub fn isolate_real_roots(&self, start: f64, end: f64, eps: f64) -> Vec<(f64, f64)> {
+        self.isolate_real_roots_iter(start, end, eps).collect()
     }
 
-    // The range bounds must be finite(not Infinite or NaN).
+    // Isolate all **real** roots (zero point) of origin polynomial equation in **left open right
+    // closed** interval (start, end]. Yields a series of (f64, f64) tuple, which is also left
+    // open right closed, each interval only contains one root. These interval lengths are
+    // guaranteed to be smaller than the `eps` parameter.
+    //
+    // # Panics
+    //
+    // When start/end is not finite, that is: infinite or NaN.
     pub fn isolate_real_roots_iter(
-        &self, range: Range<f64>, eps: f64,
-    ) -> impl Iterator<Item = Range<f64>> + '_ {
-        assert!(!range.is_empty());
-        assert!(range.start.is_finite());
-        assert!(range.end.is_finite());
+        &self, start: f64, end: f64, eps: f64,
+    ) -> impl Iterator<Item = (f64, f64)> + '_ {
+        assert!(start.is_finite());
+        assert!(end.is_finite());
+        assert!(start <= end);
 
-        let mut state = IsolateRootState::new(range, self[0].degree(), eps);
+        let mut state = IsolateRootState::new(start, end, self[0].degree(), eps);
         core::iter::from_fn(move || self.isolate_roots_iter_fn(&mut state))
     }
 
-    fn isolate_roots_iter_fn(&self, state: &mut IsolateRootState) -> Option<Range<f64>> {
+    fn isolate_roots_iter_fn(&self, state: &mut IsolateRootState) -> Option<(f64, f64)> {
         while let Some(task) = state.pop_task() {
             match task {
                 IsolateTask::Check(start, end, s, e) => {
@@ -138,7 +143,7 @@ impl SturmSeq {
 
                     match result {
                         IsolateTaskResult::Discard(_, _) => (),
-                        IsolateTaskResult::Return(_, _) => return Some(start..end),
+                        IsolateTaskResult::Return(_, _) => return Some((start, end)),
                         IsolateTaskResult::Split(s, e) => {
                             state.add_task(IsolateTask::Split(start, end, s, e));
                         }
@@ -158,7 +163,7 @@ impl SturmSeq {
                             if roots > 1 {
                                 state.add_task(IsolateTask::Check(mid, end, Some(m), Some(e)));
                             }
-                            return Some(start..mid);
+                            return Some((start, mid));
                         }
                         IsolateTaskResult::Split(_, m) => {
                             state.add_task(IsolateTask::Split(start, mid, s, m));
@@ -215,13 +220,13 @@ mod test {
         assert_eq!(sturm.sign_changes_at(f64::NEG_INFINITY), 3);
         assert_eq!(sturm.sign_changes_at(f64::INFINITY), 1);
 
-        dbg!(sturm.isolate_real_roots(-3.0..6.0, 1e-3));
+        dbg!(sturm.isolate_real_roots(-3.0, 6.0, 1e-3));
     }
 
     #[test]
     fn poly_sturm_play() {
         let poly: Poly = [1.0, -4.0, 2.0, 0.0, -3.0, 7.0].into_iter().collect();
         let sturm = SturmSeq::new(&poly);
-        dbg!(sturm.isolate_real_roots(-7.0..7.0, 1e-6));
+        dbg!(sturm.isolate_real_roots(-7.0, 7.0, 1e-6));
     }
 }
